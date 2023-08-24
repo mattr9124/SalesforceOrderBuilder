@@ -1,0 +1,50 @@
+{
+  "orgName": "OrderBuilder",
+  "edition": "Enterprise",
+  "hasSampleData": false,
+  "language": "en_US",
+  "country": "US",
+  "features": [
+    "B2BCommerce",
+    "Communities",
+    "ContactsToMultipleAccounts",
+    "OrderManagement",
+    "PlatformCache",
+    "RecordTypes"
+  ],
+  "settings": {
+    "currencySettings": {
+      "enableMultiCurrency": true
+    },
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    },
+    "experienceBundleSettings": {
+      "enableExperienceBundleMetadata": true
+    },
+    "commerceSettings": {
+      "commerceEnabled": true
+    },
+    "communitiesSettings": {
+      "enableNetworksEnabled": true
+    },
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    },
+    "orderManagementSettings": {
+      "enableOrderManagement": true
+    },
+    "orderSettings": {
+      "enableOrders": true,
+      "enableEnhancedCommerceOrders": true,
+      "enableOptionalPricebook": true
+    },
+    "languageSettings": {
+      "enableTranslationWorkbench": true,
+      "useLanguageFallback": true
+    },
+    "userManagementSettings": {
+      "enableNewProfileUI": true
+    }
+  }
+}
