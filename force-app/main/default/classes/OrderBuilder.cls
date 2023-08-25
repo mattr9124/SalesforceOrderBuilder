@@ -9,7 +9,7 @@ public with sharing class OrderBuilder {
 
     private Date effectiveDate;
     private Datetime orderedDate;
-    private Address billingAddress;
+    private Schema.Address billingAddress;
 
     private String orderName;
     private String orderReferenceNumber;
@@ -19,6 +19,12 @@ public with sharing class OrderBuilder {
     // default values
     private String taxLocaleType = 'Net';
     private String status = 'Draft';
+
+    //switches (defaults to false)
+    private Boolean creditCartPayment;
+    private String paymentType = 'Auth';
+    private PaymentGateway paymentGateway;
+
 
     private OrderBuilder() {
     }
@@ -41,17 +47,103 @@ public with sharing class OrderBuilder {
                 Status = status,
                 OrderedDate = orderedDate,
                 EffectiveDate = effectiveDate,
-                OrderReferenceNumber = orderReferenceNumber
-//                BillingAddress = billingAddress
+                OrderReferenceNumber = orderReferenceNumber,
+                BillingStreet = billingAddress.Street,
+                BillingCity = billingAddress.City,
+                BillingPostalCode = billingAddress.PostalCode,
+                BillingState = billingAddress.State,
+                BillingCountry = billingAddress.Country
         );
 
         insert order;
 
+        // TODO create order delivery group
+
         updateOrderItems(order, orderItems, pricebook2);
+
+        OrderItem deliveryItem = createDeliveryOrderItem(order, pricebook2, orderDeliveryMethod);
+        orderItems.add(deliveryItem);
 
         insert orderItems;
 
+        if (creditCartPayment) {
+
+            createPaymentObjects(order);
+
+        }
+
         return order;
+    }
+
+    private void createPaymentObjects(Order order) {
+        PaymentGroup paymentGroup = new PaymentGroup(
+                SourceObjectId = order.Id
+        );
+
+        CardPaymentMethod cardPaymentMethod = new CardPaymentMethod(
+                CardType = 'Visa',
+                CardHolderName = 'Bob Jones',
+                ExpiryYear = 2035,
+                ExpiryMonth = 06,
+                CardCategory = 'CreditCard',
+                Status = 'Active',
+                AccountId = account.Id,
+                ProcessingMode = 'External'
+        );
+
+        insert new SObject[]{
+                paymentGroup, cardPaymentMethod
+        };
+
+
+        Order orderWithTotals = [SELECT GrandTotalAmount FROM Order WHERE Id = :order.Id];
+
+        if (paymentType == 'Auth') {
+//            createAuthorization();
+        } else {
+            System.debug(JSON.serializePretty(orderWithTotals));
+            createPayment(orderWithTotals.GrandTotalAmount, cardPaymentMethod, paymentGroup);
+        }
+    }
+
+    private Payment createPayment(Decimal totalAmount, CardPaymentMethod cardPaymentMethod, PaymentGroup paymentGroup) {
+        Payment payment = new Payment(
+                PaymentGroupId = paymentGroup.Id,
+                ProcessingMode = 'External',
+                Type = paymentType,
+                PaymentGatewayId = paymentGateway.Id,
+                AccountId = account.Id,
+                PaymentMethodId = cardPaymentMethod.Id,
+                Status = 'Processed',
+                Amount = totalAmount
+        );
+
+        insert payment;
+
+        return payment;
+    }
+
+    private OrderItem createDeliveryOrderItem(Order order, Pricebook2 pricebook2, OrderDeliveryMethod orderDeliveryMethod) {
+
+        OrderItem orderItem = orderItemBuilder()
+                .withProductBySku(orderDeliveryMethod.Product.ProductCode, 1)
+                .withDeliveryChargeType()
+                .build();
+
+        orderItem.OrderId = order.Id;
+
+        // TODO maybe figure a way to override delivery price since it might not exist on every pricebook
+        PricebookEntry pricebookEntry = [
+                SELECT UnitPrice
+                FROM PricebookEntry
+                WHERE Product2Id = :orderDeliveryMethod.ProductId
+                AND Pricebook2Id = :pricebook2.Id
+                LIMIT 1
+        ];
+
+        setOrderItemPrice(orderItem, pricebookEntry);
+
+        return orderItem;
     }
 
     private void updateOrderItems(Order order, List<OrderItem> orderItems, Pricebook2 pricebook2) {
@@ -69,11 +161,36 @@ public with sharing class OrderBuilder {
                 WHERE Pricebook2Id = :pricebook2.Id
                 AND Product2Id IN :productToOrderItemMapping.keySet()
         ]) {
-            productToOrderItemMapping.get(pricebookEntry.Product2Id).UnitPrice = pricebookEntry.UnitPrice;
-            productToOrderItemMapping.get(pricebookEntry.Product2Id).PricebookEntryId = pricebookEntry.Id;
+            setOrderItemPrice(productToOrderItemMapping.get(pricebookEntry.Product2Id), pricebookEntry);
         }
     }
 
+    private void setOrderItemPrice(OrderItem orderItem, PricebookEntry pricebookEntry) {
+        orderItem.UnitPrice = pricebookEntry.UnitPrice;
+        orderItem.PricebookEntryId = pricebookEntry.Id;
+    }
+
+    public OrderBuilder withAnyPaymentGateway() {
+        return withPaymentGateway([ // take the first one you find
+                SELECT Id
+                FROM PaymentGateway
+                LIMIT 1
+        ]);
+    }
+
+    public OrderBuilder withPaymentGatewayByName(String name) {
+        return withPaymentGateway([
+                SELECT Id
+                FROM PaymentGateway
+                WHERE PaymentGatewayName = :name
+                LIMIT 1
+        ]);
+    }
+
+    public OrderBuilder withPaymentGateway(PaymentGateway paymentGateway) {
+        this.paymentGateway = paymentGateway;
+        return this;
+    }
 
     public OrderBuilder withAccountByName(String name) {
         withAccount([SELECT Id FROM Account WHERE Name = :name]);
@@ -86,8 +203,7 @@ public with sharing class OrderBuilder {
     }
 
     public OrderBuilder withStandardPricebook() {
-        return withPricebook(Test.isRunningTest() ? new Pricebook2(Id = Test.getStandardPricebookId()) :
-                [SELECT Id FROM Pricebook2 WHERE IsStandard = TRUE LIMIT 1]);
+        return withPricebook(Test.isRunningTest() ? new Pricebook2(Id = Test.getStandardPricebookId()) : [SELECT Id FROM Pricebook2 WHERE IsStandard = TRUE LIMIT 1]);
     }
 
     public OrderBuilder withPricebook(Pricebook2 pricebook2) {
@@ -99,7 +215,7 @@ public with sharing class OrderBuilder {
 
         return this;
     }
-    public OrderBuilder withBillingAddress(Address billingAddress) {
+    public OrderBuilder withBillingAddress(Schema.Address billingAddress) {
         this.billingAddress = billingAddress;
         return this;
     }
@@ -140,7 +256,12 @@ public with sharing class OrderBuilder {
     }
 
     public OrderBuilder withDeliveryMethodByName(String name) {
-        return this;
+        return withDeliveryMethod([
+                SELECT Id, ProductId, Product.Name, Product.ProductCode, Product.StockKeepingUnit
+                FROM OrderDeliveryMethod
+                WHERE Name = :name
+                LIMIT 1
+        ]);
     }
 
     public OrderBuilder withDeliveryMethod(OrderDeliveryMethod orderDeliveryMethod) {
@@ -148,9 +269,25 @@ public with sharing class OrderBuilder {
         return this;
     }
 
+    public OrderBuilder withCreditCardPayment() {
+        this.creditCartPayment = true;
+        return this;
+    }
+
+    public OrderBuilder withCapture() {
+        this.paymentType = 'Capture';
+        return this;
+    }
+
+    public OrderBuilder withSale() {
+        this.paymentType = 'Sale';
+        return this;
+    }
+
     private class OrderItemBuilder {
         private Product2 product2;
         private Integer quantity;
+        private String type = 'Order Product';
 
         private OrderItemBuilder() {
         }
@@ -158,7 +295,8 @@ public with sharing class OrderBuilder {
         public OrderItem build() {
             OrderItem orderItem = new OrderItem(
                     Product2Id = product2.Id,
-                    Quantity = quantity
+                    Quantity = quantity,
+                    Type = type
             );
 
             return orderItem;
@@ -174,6 +312,11 @@ public with sharing class OrderBuilder {
         OrderItemBuilder withProduct(Product2 product2, Integer quantity) {
             this.product2 = product2;
             this.quantity = quantity;
+            return this;
+        }
+
+        OrderItemBuilder withDeliveryChargeType() {
+            this.type = 'Delivery Charge';
             return this;
         }
     }
