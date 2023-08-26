@@ -1,5 +1,11 @@
 public with sharing class OrderBuilder {
 
+    /*
+    TODO probably want to create a separate payment builder
+    for now payments are integrated directly in this thing and
+    it's getting a bit messy.
+     */
+
     private Account account;
     private Pricebook2 pricebook2;
     private SalesChannel salesChannel;
@@ -9,32 +15,43 @@ public with sharing class OrderBuilder {
 
     private Date effectiveDate;
     private Datetime orderedDate;
+    private Schema.Address shippingAddress;
     private Schema.Address billingAddress;
 
     private String orderName;
     private String orderReferenceNumber;
 
-    private final List<OrderItem> orderItems = new List<OrderItem>();
+    private final List<ProductWrapper> productWrappers = new List<ProductWrapper>();
 
     // default values
     private String taxLocaleType = 'Net';
-    private String status = 'Draft';
 
+    // status must be draft, and can be set later
+    private final static String status = 'Draft';
+    private Boolean activateOrder = false;
+
+    private Boolean createOrderDeliveryGroup = true;
+
+    // TODO need to make payment specific builder as it's complex
     //switches (defaults to false)
-    private Boolean creditCartPayment;
+    private Boolean creditCartPayment = false;
     private String paymentType = 'Auth';
     private PaymentGateway paymentGateway;
-
+    private Map<String, Object> extraPaymentFields;
 
     private OrderBuilder() {
     }
 
-    public static OrderBuilder newOrderBuilder() {
-        return new OrderBuilder();
+    public static OrderBuilder newOrderBuilderWithDefaults() {
+        return new OrderBuilder()
+                .useRandomOrderName()
+                .useStandardPricebook()
+                .todayDates()
+                .activated();
     }
 
-    public static OrderItemBuilder orderItemBuilder() {
-        return new OrderItemBuilder();
+    public static OrderBuilder newOrderBuilder() {
+        return new OrderBuilder();
     }
 
     public Order build() {
@@ -52,27 +69,67 @@ public with sharing class OrderBuilder {
                 BillingCity = billingAddress.City,
                 BillingPostalCode = billingAddress.PostalCode,
                 BillingState = billingAddress.State,
-                BillingCountry = billingAddress.Country
+                BillingCountry = billingAddress.Country,
+                CurrencyIsoCode = account.CurrencyIsoCode
         );
 
         insert order;
 
-        // TODO create order delivery group
+        OrderDeliveryGroup orderDeliveryGroup = createOrderDeliveryGroup(order);
 
-        updateOrderItems(order, orderItems, pricebook2);
+        // build order items
+        OrderItem[] orderItems = buildOrderItems(order, productWrappers, orderDeliveryGroup, pricebook2);
 
-        OrderItem deliveryItem = createDeliveryOrderItem(order, pricebook2, orderDeliveryMethod);
+        setOrderItemPrices(orderItems, pricebook2);
+
+        OrderItem deliveryItem = createDeliveryOrderItem(order, pricebook2, orderDeliveryMethod, orderDeliveryGroup);
         orderItems.add(deliveryItem);
 
         insert orderItems;
 
         if (creditCartPayment) {
-
             createPaymentObjects(order);
+        }
 
+        if (activateOrder) {
+            order.Status = 'Activated';
+            update order;
         }
 
         return order;
+    }
+
+    private OrderItem[] buildOrderItems(Order order, List<OrderBuilder.ProductWrapper> productWrappers, OrderDeliveryGroup orderDeliveryGroup, Pricebook2 pricebook2) {
+        List<OrderItem> orderItems = new List<OrderItem>();
+
+        for (ProductWrapper productWrapper : productWrappers) {
+            orderItems.add(
+                    OrderItemBuilder.newOrderItemBuilder()
+                            .order(order)
+                            .orderDeliveryGroup(orderDeliveryGroup)
+                            .productBySku(productWrapper.sku, productWrapper.quantity)
+                            .build());
+
+        }
+        return orderItems;
+    }
+
+    private OrderDeliveryGroup createOrderDeliveryGroup(Order order) {
+
+        OrderDeliveryGroup orderDeliveryGroup = new OrderDeliveryGroup(
+                OrderId = order.Id,
+                OrderDeliveryMethodId = orderDeliveryMethod.Id,
+                DeliverToStreet = shippingAddress.Street,
+                DeliverToCity = shippingAddress.City,
+                DeliverToState = shippingAddress.State,
+                DeliverToPostalCode = shippingAddress.PostalCode,
+                DeliverToCountry = shippingAddress.Country,
+                DeliverToName = account.Name
+        );
+
+        insert orderDeliveryGroup;
+
+        return orderDeliveryGroup;
     }
 
     private void createPaymentObjects(Order order) {
@@ -118,16 +175,24 @@ public with sharing class OrderBuilder {
                 Amount = totalAmount
         );
 
+        for (String key : extraPaymentFields.keySet()) {
+            payment.put(key, extraPaymentFields.get(key));
+        }
+
         insert payment;
+
+        System.debug(payment.Id);
+        System.debug(payment.PaymentGroupId);
 
         return payment;
     }
 
-    private OrderItem createDeliveryOrderItem(Order order, Pricebook2 pricebook2, OrderDeliveryMethod orderDeliveryMethod) {
+    private OrderItem createDeliveryOrderItem(Order order, Pricebook2 pricebook2, OrderDeliveryMethod orderDeliveryMethod, OrderDeliveryGroup orderDeliveryGroup) {
 
-        OrderItem orderItem = orderItemBuilder()
-                .withProductBySku(orderDeliveryMethod.Product.ProductCode, 1)
-                .withDeliveryChargeType()
+        OrderItem orderItem = OrderItemBuilder.newOrderItemBuilder(order)
+                .productBySku(orderDeliveryMethod.Product.ProductCode, 1)
+                .deliveryChargeType()
+                .orderDeliveryGroup(orderDeliveryGroup)
                 .build();
 
         orderItem.OrderId = order.Id;
@@ -138,6 +203,7 @@ public with sharing class OrderBuilder {
                 FROM PricebookEntry
                 WHERE Product2Id = :orderDeliveryMethod.ProductId
                 AND Pricebook2Id = :pricebook2.Id
+                AND CurrencyIsoCode = :account.CurrencyIsoCode
                 LIMIT 1
         ];
 
@@ -146,12 +212,11 @@ public with sharing class OrderBuilder {
         return orderItem;
     }
 
-    private void updateOrderItems(Order order, List<OrderItem> orderItems, Pricebook2 pricebook2) {
+    private void setOrderItemPrices(List<OrderItem> orderItems, Pricebook2 pricebook2) {
 
         Map<Id, OrderItem> productToOrderItemMapping = new Map<Id, OrderItem>();
 
         for (OrderItem orderItem : orderItems) {
-            orderItem.OrderId = order.Id;
             productToOrderItemMapping.put(orderItem.Product2Id, orderItem);
         }
 
@@ -160,6 +225,7 @@ public with sharing class OrderBuilder {
                 FROM PricebookEntry
                 WHERE Pricebook2Id = :pricebook2.Id
                 AND Product2Id IN :productToOrderItemMapping.keySet()
+                AND CurrencyIsoCode = :account.CurrencyIsoCode
         ]) {
             setOrderItemPrice(productToOrderItemMapping.get(pricebookEntry.Product2Id), pricebookEntry);
         }
@@ -168,18 +234,25 @@ public with sharing class OrderBuilder {
     private void setOrderItemPrice(OrderItem orderItem, PricebookEntry pricebookEntry) {
         orderItem.UnitPrice = pricebookEntry.UnitPrice;
         orderItem.PricebookEntryId = pricebookEntry.Id;
+        orderItem.TotalLineAmount = orderItem.Quantity * pricebookEntry.UnitPrice; // this needs some additional data but for now good enough
     }
 
-    public OrderBuilder withAnyPaymentGateway() {
-        return withPaymentGateway([ // take the first one you find
+    public OrderBuilder useRandomOrderName() {
+        orderName = 'TEST-' + (Math.random() * 999999999999L).longValue();
+        orderReferenceNumber = orderName;
+        return this;
+    }
+
+    public OrderBuilder anyPaymentGateway() {
+        return paymentGateway([ // take the first one you find
                 SELECT Id
                 FROM PaymentGateway
                 LIMIT 1
         ]);
     }
 
-    public OrderBuilder withPaymentGatewayByName(String name) {
-        return withPaymentGateway([
+    public OrderBuilder paymentGatewayByName(String name) {
+        return paymentGateway([
                 SELECT Id
                 FROM PaymentGateway
                 WHERE PaymentGatewayName = :name
@@ -187,76 +260,86 @@ public with sharing class OrderBuilder {
         ]);
     }
 
-    public OrderBuilder withPaymentGateway(PaymentGateway paymentGateway) {
+    public OrderBuilder paymentGateway(PaymentGateway paymentGateway) {
         this.paymentGateway = paymentGateway;
         return this;
     }
 
-    public OrderBuilder withAccountByName(String name) {
-        withAccount([SELECT Id FROM Account WHERE Name = :name]);
+    public OrderBuilder accountByName(String accountName) {
+        account([SELECT Name, CurrencyIsoCode FROM Account WHERE Name = :accountName]);
         return this;
     }
 
-    public OrderBuilder withAccount(Account account) {
+    public OrderBuilder account(Account account) {
         this.account = account;
         return this;
     }
 
-    public OrderBuilder withStandardPricebook() {
-        return withPricebook(Test.isRunningTest() ? new Pricebook2(Id = Test.getStandardPricebookId()) : [SELECT Id FROM Pricebook2 WHERE IsStandard = TRUE LIMIT 1]);
+    public OrderBuilder useStandardPricebook() {
+        return pricebook(Test.isRunningTest() ? new Pricebook2(Id = Test.getStandardPricebookId()) : [SELECT Id FROM Pricebook2 WHERE IsStandard = TRUE LIMIT 1]);
     }
 
-    public OrderBuilder withPricebook(Pricebook2 pricebook2) {
+    public OrderBuilder pricebook(Pricebook2 pricebook2) {
         this.pricebook2 = pricebook2;
         return this;
     }
 
-    public OrderBuilder withPricebookByName(String name) {
+    public OrderBuilder pricebookByName(String name) {
 
         return this;
     }
-    public OrderBuilder withBillingAddress(Schema.Address billingAddress) {
+
+    public OrderBuilder shippingAndBillingAddress(Schema.Address address) {
+        return shippingAddress(address).billingAddress(address);
+    }
+
+    public OrderBuilder shippingAddress(Schema.Address shippingAddress) {
+        this.shippingAddress = shippingAddress;
+        return this;
+    }
+
+    public OrderBuilder billingAddress(Schema.Address billingAddress) {
         this.billingAddress = billingAddress;
         return this;
     }
 
-    public OrderBuilder withSalesChannelByName(String name) {
-        return withSalesChannel([SELECT Id FROM SalesChannel WHERE SalesChannelName = :name LIMIT 1]);
+    public OrderBuilder salesChannelByName(String name) {
+        return salesChannel([SELECT Id FROM SalesChannel WHERE SalesChannelName = :name LIMIT 1]);
     }
 
-    public OrderBuilder withSalesChannel(SalesChannel salesChannel) {
+    public OrderBuilder salesChannel(SalesChannel salesChannel) {
         this.salesChannel = salesChannel;
         return this;
     }
 
-    public OrderBuilder withTodayDates() {
-        this.effectiveDate = today;
-        this.orderedDate = now;
+    public OrderBuilder todayDates() {
+        effectiveDate(today);
+        orderedDate(now);
         return this;
     }
 
-    public OrderBuilder withEffectiveDate(Date effectiveDate) {
+    public OrderBuilder effectiveDate(Date effectiveDate) {
         this.effectiveDate = effectiveDate;
         return this;
     }
 
-    public OrderBuilder withOrderedDate(Date orderedDate) {
+    public OrderBuilder orderedDate(Datetime orderedDate) {
         this.orderedDate = orderedDate;
         return this;
     }
 
-    public OrderBuilder withProductBySku(String sku, Integer quantity) {
-        orderItems.add(orderItemBuilder().withProductBySku(sku, quantity).build());
+    public OrderBuilder activated() {
+        activateOrder = true;
         return this;
     }
 
-    public OrderBuilder withProduct(Product2 product2, Integer quantity) {
-        orderItems.add(orderItemBuilder().withProduct(product2, quantity).build());
+    public OrderBuilder addProductBySku(String sku, Integer quantity) {
+        productWrappers.add(new ProductWrapper(sku, quantity));
         return this;
     }
 
-    public OrderBuilder withDeliveryMethodByName(String name) {
-        return withDeliveryMethod([
+    public OrderBuilder deliveryMethodByName(String name) {
+        return deliveryMethod([
                 SELECT Id, ProductId, Product.Name, Product.ProductCode, Product.StockKeepingUnit
                 FROM OrderDeliveryMethod
                 WHERE Name = :name
@@ -264,60 +347,38 @@ public with sharing class OrderBuilder {
         ]);
     }
 
-    public OrderBuilder withDeliveryMethod(OrderDeliveryMethod orderDeliveryMethod) {
+    public OrderBuilder deliveryMethod(OrderDeliveryMethod orderDeliveryMethod) {
         this.orderDeliveryMethod = orderDeliveryMethod;
         return this;
     }
 
-    public OrderBuilder withCreditCardPayment() {
-        this.creditCartPayment = true;
-        return this;
-    }
+//    public OrderBuilder creditCardPayment() {
+//        return this.creditCardPayment(new Map<String, Object> {});
+//    }
+//
+//    public OrderBuilder creditCardPayment(Map<String, Object> extraFields) {
+//        this.creditCartPayment = true;
+//        this.extraPaymentFields = extraFields;
+//        return this;
+//    }
+//
+//    public OrderBuilder withCapture() {
+//        this.paymentType = 'Capture';
+//        return this;
+//    }
+//
+//    public OrderBuilder withSale() {
+//        this.paymentType = 'Sale';
+//        return this;
+//    }
+//
+    private class ProductWrapper {
+        final String sku;
+        final Integer quantity;
 
-    public OrderBuilder withCapture() {
-        this.paymentType = 'Capture';
-        return this;
-    }
-
-    public OrderBuilder withSale() {
-        this.paymentType = 'Sale';
-        return this;
-    }
-
-    private class OrderItemBuilder {
-        private Product2 product2;
-        private Integer quantity;
-        private String type = 'Order Product';
-
-        private OrderItemBuilder() {
-        }
-
-        public OrderItem build() {
-            OrderItem orderItem = new OrderItem(
-                    Product2Id = product2.Id,
-                    Quantity = quantity,
-                    Type = type
-            );
-
-            return orderItem;
-        }
-
-        OrderItemBuilder withProductBySku(String sku, Integer quantity) {
-            return withProduct(
-                    [SELECT Id FROM Product2 WHERE StockKeepingUnit = :sku OR ProductCode = :sku LIMIT 1],
-                    quantity
-            );
-        }
-
-        OrderItemBuilder withProduct(Product2 product2, Integer quantity) {
-            this.product2 = product2;
+        ProductWrapper(String sku, Integer quantity) {
+            this.sku = sku;
             this.quantity = quantity;
-            return this;
-        }
-
-        OrderItemBuilder withDeliveryChargeType() {
-            this.type = 'Delivery Charge';
-            return this;
         }
     }
 }
