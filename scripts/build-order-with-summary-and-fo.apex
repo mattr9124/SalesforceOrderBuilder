@@ -15,6 +15,7 @@ This allows for getting your order to look the way you want before committing it
 
 When you're ready to commit, set the "rollback" boolean to false and run it again to commit the transaction.
  */
+Boolean isRollback = true;
 
 Savepoint sp = Database.setSavepoint();
 try {
@@ -53,5 +54,7 @@ try {
             WHERE Id = :orderSummaryId
     ]));
 } finally {
-    Database.rollback(sp);
+    if (isRollback) {
+        Database.rollback(sp);
+    }
 }

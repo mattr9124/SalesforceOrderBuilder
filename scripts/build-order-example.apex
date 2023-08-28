@@ -12,7 +12,7 @@ This allows for getting your order to look the way you want before committing it
 When you're ready to commit, set the "rollback" boolean to false and run it again to commit the transaction.
  */
 
-Boolean rollback = true;
+Boolean isRollback = true;
 
 Savepoint sp = Database.setSavepoint();
 try {
@@ -34,7 +34,7 @@ try {
             .useStandardPricebook()
             .addPaymentInfo(
                     OrderBuilder.paymentBuilder()
-                            .creditCard().sale()
+                            .authorizedCreditCard()
             )
             .deliveryMethodByName('DHL')
             .build();
@@ -49,7 +49,7 @@ try {
 
     System.debug(JSON.serializePretty(order));
 } finally {
-    if (rollback) {
+    if (isRollback) {
         Database.rollback(sp);
     }
 }

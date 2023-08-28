@@ -13,7 +13,6 @@ public with sharing class OrderBuilder {
         AUTH, CAPTURE, SALE
     }
 
-
     private Account account;
     private Pricebook2 pricebook2;
     private SalesChannel salesChannel;
@@ -45,7 +44,6 @@ public with sharing class OrderBuilder {
     private PaymentGateway paymentGateway;
 
     private final Map<String, Object> extraOrderFields = new Map<String, Object>();
-    private final Map<String, Object> extraPaymentFields = new Map<String, Object>();
 
     private OrderBuilder() {
     }
@@ -85,9 +83,12 @@ public with sharing class OrderBuilder {
         OrderItem deliveryItem = createDeliveryOrderItem(order, orderDeliveryGroup);
         orderItems.add(deliveryItem);
 
-        if (!pricebookOptional) {
+        if (pricebookOptional) { // TODO find a cleaner way to handle pricing
+            setListPriceOnOrderItems(orderItems);
+        } else {
             setOrderItemPrices(orderItems, pricebook2);
         }
+
 
         insert orderItems;
 
@@ -101,7 +102,7 @@ public with sharing class OrderBuilder {
         return order;
     }
 
-    public OrderBuilder extraFields(Map<String, Object> extraFields) {
+    public OrderBuilder withExtraFields(Map<String, Object> extraFields) {
         this.extraOrderFields.putAll(extraFields);
         return this;
     }
@@ -227,14 +228,6 @@ public with sharing class OrderBuilder {
         return this;
     }
 
-    public PaymentInfo authorizedCreditCardPayment() {
-        return paymentBuilder().creditCard().authorization();
-    }
-
-    public PaymentInfo capturedCreditCardPayment() {
-        return paymentBuilder().creditCard().capture();
-    }
-
     public OrderBuilder useRandomOrderName() {
         String randomName = 'TEST-' + (Math.random() * 999999999999L).longValue();
         orderName(randomName);
@@ -290,7 +283,6 @@ public with sharing class OrderBuilder {
                     SourceObjectId = order.Id
             );
 
-
             switch on paymentInfo.paymentType {
                 when CREDIT_CARD {
                     CardPaymentMethod cardPaymentMethod = createCreditCardPayment();
@@ -299,16 +291,19 @@ public with sharing class OrderBuilder {
                             paymentGroup, cardPaymentMethod
                     };
 
+                    SObject paymentObject;
                     switch on paymentInfo.creditCardMethod {
                         when AUTH {
-                            // TODO implement this!
-                            throw new UnsupportedPaymentTypeException();
+                            paymentObject = new PaymentAuthorization();
                         }
                         when CAPTURE, SALE {
-                            Decimal amount = paymentInfo.paymentAmount == null || singlePayment ? orderTotalAmount.GrandTotalAmount : paymentInfo.paymentAmount;
-                            createPayment(amount, cardPaymentMethod, paymentGroup, paymentInfo.creditCardMethod.name());
+                            paymentObject = new Payment(Type = paymentInfo.creditCardMethod.name().toLowerCase().capitalize());
                         }
                     }
+                    Decimal amount = determinePaymentAmount(paymentInfo, singlePayment, orderTotalAmount);
+                    setCommonAndExtraPaymentFields(paymentObject, paymentGroup, paymentInfo, amount, cardPaymentMethod);
+
+                    insert paymentObject;
                 }
                 when DIGITAL_WALLET {
                     // TODO implement this!
@@ -318,8 +313,25 @@ public with sharing class OrderBuilder {
                     throw new UnsupportedPaymentTypeException();
                 }
             }
-
         }
+    }
+
+    private void setCommonAndExtraPaymentFields(SObject paymentObject, PaymentGroup paymentGroup, PaymentInfo paymentInfo, Decimal amount, CardPaymentMethod cardPaymentMethod) {
+        paymentObject.put('PaymentGroupId', paymentGroup.Id);
+        paymentObject.put('PaymentGatewayId', paymentGateway.Id);
+        paymentObject.put('PaymentMethodId', cardPaymentMethod.Id);
+        paymentObject.put('ProcessingMode', 'External');
+        paymentObject.put('GatewayRefNumber', paymentInfo.gatewayReferenceNumber);
+        paymentObject.put('Amount', amount);
+        paymentObject.put('CurrencyIsoCode', account.CurrencyIsoCode);
+        paymentObject.put('Status', 'Processed');
+
+        setExtraFields(paymentObject, paymentInfo.extraFields);
+    }
+
+    private Decimal determinePaymentAmount(PaymentInfo paymentInfo, Boolean singlePayment, Order orderTotalAmount) {
+        Decimal amount = paymentInfo.paymentAmount == null || singlePayment ? orderTotalAmount.GrandTotalAmount : paymentInfo.paymentAmount;
+        return amount;
     }
 
     private OrderItem[] buildOrderItems(Order order, OrderDeliveryGroup orderDeliveryGroup) {
@@ -354,25 +366,6 @@ public with sharing class OrderBuilder {
         insert orderDeliveryGroup;
 
         return orderDeliveryGroup;
-    }
-
-    private Payment createPayment(Decimal totalAmount, CardPaymentMethod cardPaymentMethod, PaymentGroup paymentGroup, String paymentType) {
-        Payment payment = new Payment(
-                PaymentGroupId = paymentGroup.Id,
-                ProcessingMode = 'External',
-                Type = paymentType.toLowerCase().capitalize(),
-                PaymentGatewayId = paymentGateway.Id,
-                AccountId = account.Id,
-                PaymentMethodId = cardPaymentMethod.Id,
-                Status = 'Processed',
-                Amount = totalAmount
-        );
-
-        setExtraFields(payment, extraPaymentFields);
-
-        insert payment;
-
-        return payment;
     }
 
     private void setExtraFields(SObject theObject, Map<String, Object> extraFields) {
@@ -440,9 +433,19 @@ public with sharing class OrderBuilder {
         setOrderItemPrice(orderItem, pricebookEntry.UnitPrice);
     }
 
+    private void setListPriceOnOrderItems(OrderItem[] orderItems) {
+        for (OrderItem orderItem : orderItems) {
+            orderItem.ListPrice = orderItem.UnitPrice;
+        }
+    }
+
     public class PaymentInfo {
         private E_PaymentType paymentType;
         private E_CreditCardMethod creditCardMethod;
+
+        private String gatewayReferenceNumber;
+
+        private final Map<String, Object> extraFields = new Map<String, Object>();
 
         private Decimal paymentAmount;
 
@@ -452,6 +455,14 @@ public with sharing class OrderBuilder {
         public PaymentInfo creditCard() {
             paymentType = E_PaymentType.CREDIT_CARD;
             return this;
+        }
+
+        public PaymentInfo authorizedCreditCard() {
+            return this.creditCard().authorization();
+        }
+
+        public PaymentInfo capturedCreditCard() {
+            return this.creditCard().capture();
         }
 
         public PaymentInfo digitalWallet() {
@@ -474,8 +485,18 @@ public with sharing class OrderBuilder {
             return this;
         }
 
+        public PaymentInfo gatewayReferenceNumber(String referenceNumber) {
+            this.gatewayReferenceNumber = referenceNumber;
+            return this;
+        }
+
         public PaymentInfo paymentAmount(Decimal paymentAmount) {
             this.paymentAmount = paymentAmount;
+            return this;
+        }
+
+        public PaymentInfo withExtraFields(Map<String, Object> extraFields) {
+            this.extraFields.putAll(extraFields);
             return this;
         }
     }
@@ -496,5 +517,6 @@ public with sharing class OrderBuilder {
         }
     }
 
-    private class UnsupportedPaymentTypeException extends Exception {}
+    private class UnsupportedPaymentTypeException extends Exception {
+    }
 }
