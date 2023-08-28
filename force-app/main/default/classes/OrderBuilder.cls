@@ -1,10 +1,18 @@
 public with sharing class OrderBuilder {
 
     /*
-    TODO probably want to create a separate payment builder
-    for now payments are integrated directly in this thing and
-    it's getting a bit messy.
+    NOTE: Using E_ prefix to avoid naming conflicts
+    If using PaymentType directly, it works but only
+    if fully qualified which makes a lot more typing.
      */
+    private enum E_PaymentType {
+        CREDIT_CARD, DIGITAL_WALLET
+    }
+
+    private enum E_CreditCardMethod {
+        AUTH, CAPTURE, SALE
+    }
+
 
     private Account account;
     private Pricebook2 pricebook2;
@@ -22,6 +30,7 @@ public with sharing class OrderBuilder {
     private String orderReferenceNumber;
 
     private final List<ProductWrapper> productWrappers = new List<ProductWrapper>();
+    private final List<OrderBuilder.PaymentInfo> payments = new List<OrderBuilder.PaymentInfo>();
 
     // default values
     private String taxLocaleType = 'Net';
@@ -35,9 +44,9 @@ public with sharing class OrderBuilder {
     // TODO need to make payment specific builder as it's complex
     //switches (defaults to false)
     private Boolean creditCartPayment = false;
-    private String paymentType = 'Auth';
+//    private String paymentType = 'Auth';
     private PaymentGateway paymentGateway;
-    private Map<String, Object> extraPaymentFields;
+    private final Map<String, Object> extraPaymentFields = new Map<String, Object>();
 
     private OrderBuilder() {
     }
@@ -87,9 +96,8 @@ public with sharing class OrderBuilder {
 
         insert orderItems;
 
-        if (creditCartPayment) {
-            createPaymentObjects(order);
-        }
+
+        buildPayments(order, payments);
 
         if (activateOrder) {
             order.Status = 'Activated';
@@ -97,6 +105,48 @@ public with sharing class OrderBuilder {
         }
 
         return order;
+    }
+
+    private void buildPayments(Order order, List<OrderBuilder.PaymentInfo> paymentInfos) {
+
+        Order orderTotalAmount = [SELECT GrandTotalAmount FROM Order WHERE Id = :order.Id];
+        Boolean singlePayment = paymentInfos.size() == 1;
+
+        for (PaymentInfo paymentInfo : payments) {
+            PaymentGroup paymentGroup = new PaymentGroup(
+                    SourceObjectId = order.Id
+            );
+
+
+            switch on paymentInfo.paymentType {
+                when CREDIT_CARD {
+                    CardPaymentMethod cardPaymentMethod = createCreditCardPayment();
+
+                    insert new SObject[]{
+                            paymentGroup, cardPaymentMethod
+                    };
+
+                    switch on paymentInfo.creditCardMethod {
+                        when AUTH {
+                            // TODO implement this!
+                            throw new UnsupportedPaymentTypeException();
+                        }
+                        when CAPTURE, SALE {
+                            Decimal amount = paymentInfo.paymentAmount == null || singlePayment ? orderTotalAmount.GrandTotalAmount : paymentInfo.paymentAmount;
+                            createPayment(amount, cardPaymentMethod, paymentGroup, paymentInfo.creditCardMethod.name());
+                        }
+                    }
+                }
+                when DIGITAL_WALLET {
+                    // TODO implement this!
+                    throw new UnsupportedPaymentTypeException();
+                }
+                when else {
+                    throw new UnsupportedPaymentTypeException();
+                }
+            }
+
+        }
     }
 
     private OrderItem[] buildOrderItems(Order order, List<OrderBuilder.ProductWrapper> productWrappers, OrderDeliveryGroup orderDeliveryGroup, Pricebook2 pricebook2) {
@@ -132,42 +182,11 @@ public with sharing class OrderBuilder {
         return orderDeliveryGroup;
     }
 
-    private void createPaymentObjects(Order order) {
-        PaymentGroup paymentGroup = new PaymentGroup(
-                SourceObjectId = order.Id
-        );
-
-        CardPaymentMethod cardPaymentMethod = new CardPaymentMethod(
-                CardType = 'Visa',
-                CardHolderName = 'Bob Jones',
-                ExpiryYear = 2035,
-                ExpiryMonth = 06,
-                CardCategory = 'CreditCard',
-                Status = 'Active',
-                AccountId = account.Id,
-                ProcessingMode = 'External'
-        );
-
-        insert new SObject[]{
-                paymentGroup, cardPaymentMethod
-        };
-
-
-        Order orderWithTotals = [SELECT GrandTotalAmount FROM Order WHERE Id = :order.Id];
-
-        if (paymentType == 'Auth') {
-//            createAuthorization();
-        } else {
-            System.debug(JSON.serializePretty(orderWithTotals));
-            createPayment(orderWithTotals.GrandTotalAmount, cardPaymentMethod, paymentGroup);
-        }
-    }
-
-    private Payment createPayment(Decimal totalAmount, CardPaymentMethod cardPaymentMethod, PaymentGroup paymentGroup) {
+    private Payment createPayment(Decimal totalAmount, CardPaymentMethod cardPaymentMethod, PaymentGroup paymentGroup, String paymentType) {
         Payment payment = new Payment(
                 PaymentGroupId = paymentGroup.Id,
                 ProcessingMode = 'External',
-                Type = paymentType,
+                Type = paymentType.toLowerCase().capitalize(),
                 PaymentGatewayId = paymentGateway.Id,
                 AccountId = account.Id,
                 PaymentMethodId = cardPaymentMethod.Id,
@@ -181,10 +200,20 @@ public with sharing class OrderBuilder {
 
         insert payment;
 
-        System.debug(payment.Id);
-        System.debug(payment.PaymentGroupId);
-
         return payment;
+    }
+
+    private CardPaymentMethod createCreditCardPayment() {
+        return new CardPaymentMethod(
+                CardType = 'Visa',
+                CardHolderName = 'Bob Jones',
+                ExpiryYear = 2035,
+                ExpiryMonth = 06,
+                CardCategory = 'CreditCard',
+                Status = 'Active',
+                AccountId = account.Id,
+                ProcessingMode = 'External'
+        );
     }
 
     private OrderItem createDeliveryOrderItem(Order order, Pricebook2 pricebook2, OrderDeliveryMethod orderDeliveryMethod, OrderDeliveryGroup orderDeliveryGroup) {
@@ -347,31 +376,69 @@ public with sharing class OrderBuilder {
         ]);
     }
 
+
     public OrderBuilder deliveryMethod(OrderDeliveryMethod orderDeliveryMethod) {
         this.orderDeliveryMethod = orderDeliveryMethod;
         return this;
     }
 
-//    public OrderBuilder creditCardPayment() {
-//        return this.creditCardPayment(new Map<String, Object> {});
-//    }
-//
-//    public OrderBuilder creditCardPayment(Map<String, Object> extraFields) {
-//        this.creditCartPayment = true;
-//        this.extraPaymentFields = extraFields;
-//        return this;
-//    }
-//
-//    public OrderBuilder withCapture() {
-//        this.paymentType = 'Capture';
-//        return this;
-//    }
-//
-//    public OrderBuilder withSale() {
-//        this.paymentType = 'Sale';
-//        return this;
-//    }
-//
+    public OrderBuilder addPaymentInfo(PaymentInfo paymentInfo) {
+        payments.add(paymentInfo);
+        return this;
+    }
+
+    public static PaymentInfo paymentBuilder() {
+        return new PaymentInfo();
+    }
+
+    public PaymentInfo authorizedCreditCardPayment() {
+        return paymentBuilder().creditCard().authorization();
+    }
+
+    public PaymentInfo capturedCreditCardPayment() {
+        return paymentBuilder().creditCard().capture();
+    }
+
+    public class PaymentInfo {
+        private E_PaymentType paymentType;
+        private E_CreditCardMethod creditCardMethod;
+
+        private Decimal paymentAmount;
+
+        PaymentInfo() {
+        }
+
+        public PaymentInfo creditCard() {
+            paymentType = E_PaymentType.CREDIT_CARD;
+            return this;
+        }
+
+        public PaymentInfo digitalWallet() {
+            paymentType = OrderBuilder.E_PaymentType.DIGITAL_WALLET;
+            return this;
+        }
+
+        public PaymentInfo authorization() {
+            creditCardMethod = OrderBuilder.E_CreditCardMethod.AUTH;
+            return this;
+        }
+
+        public PaymentInfo capture() {
+            creditCardMethod = OrderBuilder.E_CreditCardMethod.CAPTURE;
+            return this;
+        }
+
+        public PaymentInfo sale() {
+            creditCardMethod = OrderBuilder.E_CreditCardMethod.SALE;
+            return this;
+        }
+
+        public PaymentInfo paymentAmount(Decimal paymentAmount) {
+            this.paymentAmount = paymentAmount;
+            return this;
+        }
+    }
+
     private class ProductWrapper {
         final String sku;
         final Integer quantity;
@@ -381,4 +448,6 @@ public with sharing class OrderBuilder {
             this.quantity = quantity;
         }
     }
+
+    private class UnsupportedPaymentTypeException extends Exception {}
 }
