@@ -20,7 +20,7 @@ try {
     Order order = OrderBuilder.newOrderBuilder()
             .accountByName('Bob Jones')
             .salesChannelByName('InStore')
-            .billingAddress(new Schema.Address(
+            .shippingAndBillingAddress(new Schema.Address(
                     Street = 'Test',
                     City = 'Test',
                     PostalCode = '12345',
@@ -32,8 +32,10 @@ try {
             .addProductBySku('M12345', 2)
             .anyPaymentGateway()
             .useStandardPricebook()
-//            .creditcreditCardPayment()
-//            .sale()
+            .addPaymentInfo(
+                    OrderBuilder.paymentBuilder()
+                            .creditCard().sale()
+            )
             .deliveryMethodByName('DHL')
             .build();
     //refetch
