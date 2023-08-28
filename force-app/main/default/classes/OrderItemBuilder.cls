@@ -1,9 +1,19 @@
+/*
+TODO maybe put this back into order builder class
+While I like separating things, since this is meant to be
+a utility, it might be worth keeping it in a single class
+that way can easily be deployed and removed.
+ */
 public with sharing class OrderItemBuilder {
+    public final static String ORDER_TYPE_PRODUCT = 'Order Product';
+    public final static String ORDER_TYPE_DELIVERY = 'Delivery Charge';
+
     private Product2 product2;
     private Integer quantity;
+    private Decimal unitPrice;
     private Order order;
     private OrderDeliveryGroup orderDeliveryGroup;
-    private String type = 'Order Product';
+    private String type = ORDER_TYPE_PRODUCT;
 
     private OrderItemBuilder() {
     }
@@ -25,6 +35,11 @@ public with sharing class OrderItemBuilder {
                 Type = type
         );
 
+        if (unitPrice != null && unitPrice > 0) {
+            orderItem.UnitPrice = unitPrice;
+            orderItem.TotalLineAmount = unitPrice * quantity; // TODO this logic is duplicated - find a better way
+        }
+
         return orderItem;
     }
 
@@ -41,8 +56,13 @@ public with sharing class OrderItemBuilder {
         return this;
     }
 
+    public OrderItemBuilder unitPrice(Decimal unitPrice) {
+        this.unitPrice = unitPrice;
+        return this;
+    }
+
     public OrderItemBuilder deliveryChargeType() {
-        this.type = 'Delivery Charge';
+        this.type = ORDER_TYPE_DELIVERY;
         return this;
     }
 

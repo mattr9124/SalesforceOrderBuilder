@@ -78,6 +78,36 @@ private class OrderBuilderTest {
         Assert.areEqual(103.99, payments[0].Amount);
 
     }
+
+    @IsTest
+    static void buildOrderNoPricebook() {
+        // setup: Create some test data
+        TestDataFactory.createBasicTestData();
+
+        //when: building an order with 1 product of quantity 2
+        Order order = OrderBuilder.newOrderBuilder()
+                .accountByName('Bob Jones')
+                .salesChannelByName('In Store')
+                .todayDates()
+                .addProductBySkuWithPrice('M12345', 2, 10)
+                .deliveryMethodByNameWithPrice('DHL', 2)
+                .shippingAndBillingAddress(getTestAddress())
+                .noPricebook()
+                .build();
+
+        //then: should get an order with an order item and the correct price
+        OrderItem[] orderItems = [
+                SELECT UnitPrice, TotalLineAmount FROM OrderItem WHERE OrderId = :order.Id
+        ];
+
+        System.debug(JSON.serializePretty(orderItems));
+
+        Assert.isNotNull(orderItems);
+        Assert.isTrue(orderItems.size() == 2, 'There should be 2 order item');
+
+
+    }
+
     private static Schema.Address getTestAddress() {
         return new Schema.Address(
                 Street = 'Test',
