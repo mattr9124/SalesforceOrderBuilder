@@ -89,4 +89,20 @@ public with sharing class OmsConnectHelper {
         ]
         }, location, fulfillmentType);
     }
+
+    /**
+     * This is really just to write less code. It will call the connect API with the correct input
+     * objects.
+     * @param orderSummaryId
+     * @param invoiceId
+     *
+     * @return
+     */
+    public static ConnectApi.EnsureFundsAsyncOutputRepresentation ensureFunds(Id orderSummaryId, Id invoiceId) {
+        ConnectApi.EnsureFundsAsyncInputRepresentation ensureFundsAsyncInputRepresentation = new ConnectApi.EnsureFundsAsyncInputRepresentation();
+
+        ensureFundsAsyncInputRepresentation.invoiceId = invoiceId;
+
+        return ConnectApi.OrderSummary.ensureFundsAsync(orderSummaryId, ensureFundsAsyncInputRepresentation);
+    }
 }
