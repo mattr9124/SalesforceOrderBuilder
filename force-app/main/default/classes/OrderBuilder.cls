@@ -13,6 +13,9 @@ public with sharing class OrderBuilder {
         AUTH, CAPTURE, SALE
     }
 
+    public final static String ORDER_TYPE_PRODUCT = 'Order Product';
+    public final static String ORDER_TYPE_DELIVERY = 'Delivery Charge';
+
     private Account account;
     private Pricebook2 pricebook2;
     private SalesChannel salesChannel;
@@ -83,12 +86,11 @@ public with sharing class OrderBuilder {
         OrderItem deliveryItem = createDeliveryOrderItem(order, orderDeliveryGroup);
         orderItems.add(deliveryItem);
 
-        if (pricebookOptional) { // TODO find a cleaner way to handle pricing
+        if (pricebookOptional) {
             setListPriceOnOrderItems(orderItems);
         } else {
             setOrderItemPrices(orderItems, pricebook2);
         }
-
 
         insert orderItems;
 
@@ -146,8 +148,7 @@ public with sharing class OrderBuilder {
     }
 
     public OrderBuilder pricebookByName(String name) {
-
-        return this;
+        return pricebook([SELECT Id FROM Pricebook2 WHERE Name = :name]);
     }
 
     public OrderBuilder shippingAndBillingAddress(Schema.Address address) {
@@ -204,23 +205,44 @@ public with sharing class OrderBuilder {
         return this;
     }
 
+    public OrderBuilder deliveryMethodById(Id deliveryMethodId) {
+        return deliveryMethodById(deliveryMethodId, 0);
+    }
+
+    public OrderBuilder deliveryMethodById(Id deliveryMethodId, Decimal deliveryPrice) {
+        return deliveryMethod(queryDeliveryMethod('Id = :id', new Map<String, Object> { 'id' => deliveryMethodId}), deliveryPrice);
+    }
+
+    public OrderBuilder deliveryMethodByProductName(String name) {
+        return deliveryMethodByProductName(name, 0);
+    }
+
+    public OrderBuilder deliveryMethodByProductName(String name, Decimal deliveryPrice) {
+        return deliveryMethod(queryDeliveryMethod('Product.Name = :name', new Map<String, Object> { 'name' => name}), deliveryPrice);
+    }
+
     public OrderBuilder deliveryMethodByName(String name) {
         return deliveryMethodByNameWithPrice(name, 0);
     }
 
     public OrderBuilder deliveryMethodByNameWithPrice(String name, Decimal deliveryPrice) {
-        return deliveryMethod([
-                SELECT Id, ProductId, Product.Name, Product.ProductCode, Product.StockKeepingUnit
-                FROM OrderDeliveryMethod
-                WHERE Name = :name
-                LIMIT 1
-        ], deliveryPrice);
+        return deliveryMethod(queryDeliveryMethod('Name = :name', new Map<String, Object> { 'name' => name}), deliveryPrice);
     }
 
     public OrderBuilder deliveryMethod(OrderDeliveryMethod orderDeliveryMethod, Decimal deliveryPrice) {
         this.orderDeliveryMethod = orderDeliveryMethod;
         this.deliveryPrice = deliveryPrice;
         return this;
+    }
+
+    private final static String DELIVERY_QUERY = 'SELECT Id, ProductId, Product.Name, Product.ProductCode, Product.StockKeepingUnit ' +
+                                                 'FROM OrderDeliveryMethod WHERE {0}';
+
+    private OrderDeliveryMethod queryDeliveryMethod(String whereClause, Map<String, Object> parameters) {
+        String fullQuery = String.format(DELIVERY_QUERY, new Object[] {whereClause});
+        OrderDeliveryMethod[] orderDeliveryMethod = Database.queryWithBinds(fullQuery, parameters, AccessLevel.USER_MODE);
+
+        return orderDeliveryMethod[0];
     }
 
     public OrderBuilder addPaymentInfo(PaymentInfo paymentInfo) {
@@ -338,8 +360,7 @@ public with sharing class OrderBuilder {
         List<OrderItem> orderItems = new List<OrderItem>();
 
         for (ProductBuilder productWrapper : productWrappers) {
-            orderItems.add(
-                    OrderItemBuilder.newOrderItemBuilder()
+            orderItems.add(newOrderItemBuilder()
                             .order(order)
                             .orderDeliveryGroup(orderDeliveryGroup)
                             .productBySku(productWrapper.sku, productWrapper.quantity)
@@ -377,7 +398,7 @@ public with sharing class OrderBuilder {
     private CardPaymentMethod createCreditCardPayment() {
         return new CardPaymentMethod(
                 CardType = 'Visa',
-                CardHolderName = 'Bob Jones',
+                CardHolderName = account.Name,
                 ExpiryYear = 2035,
                 ExpiryMonth = 06,
                 CardCategory = 'CreditCard',
@@ -389,10 +410,10 @@ public with sharing class OrderBuilder {
 
     private OrderItem createDeliveryOrderItem(Order order, OrderDeliveryGroup orderDeliveryGroup) {
 
-        OrderItem orderItem = OrderItemBuilder.newOrderItemBuilder(order)
-                .productBySku(orderDeliveryMethod.Product.ProductCode, 1)
+        OrderItem orderItem = newOrderItemBuilder(order)
                 .deliveryChargeType()
                 .orderDeliveryGroup(orderDeliveryGroup)
+                .product(orderDeliveryMethod.Product, 1)
                 .build();
 
         orderItem.OrderId = order.Id;
@@ -436,6 +457,77 @@ public with sharing class OrderBuilder {
     private void setListPriceOnOrderItems(OrderItem[] orderItems) {
         for (OrderItem orderItem : orderItems) {
             orderItem.ListPrice = orderItem.UnitPrice;
+        }
+    }
+
+
+    public static OrderItemBuilder newOrderItemBuilder() {
+        return new OrderItemBuilder();
+    }
+
+    public static OrderItemBuilder newOrderItemBuilder(Order order) {
+        return new OrderItemBuilder().order(order);
+    }
+
+    public class OrderItemBuilder {
+        private Product2 product2;
+        private Integer quantity;
+        private Decimal unitPrice;
+        private Order order;
+        private OrderDeliveryGroup orderDeliveryGroup;
+        private String type = ORDER_TYPE_PRODUCT;
+
+        OrderItemBuilder() {
+        }
+
+        public OrderItem build() {
+            OrderItem orderItem = new OrderItem(
+                    Product2Id = product2.Id,
+                    Quantity = quantity,
+                    OrderId = order.Id,
+                    OrderDeliveryGroupId = orderDeliveryGroup.Id,
+                    Type = type
+            );
+
+            if (unitPrice != null && unitPrice > 0) {
+                orderItem.UnitPrice = unitPrice;
+                orderItem.TotalLineAmount = unitPrice * quantity; // TODO this logic is duplicated - find a better way
+            }
+
+            return orderItem;
+        }
+
+        public OrderItemBuilder productBySku(String sku, Integer quantity) {
+            return product(
+                    [SELECT Id FROM Product2 WHERE StockKeepingUnit = :sku OR ProductCode = :sku LIMIT 1],
+                    quantity
+            );
+        }
+
+        public OrderItemBuilder product(Product2 product2, Integer quantity) {
+            this.product2 = product2;
+            this.quantity = quantity;
+            return this;
+        }
+
+        public OrderItemBuilder unitPrice(Decimal unitPrice) {
+            this.unitPrice = unitPrice;
+            return this;
+        }
+
+        public OrderItemBuilder deliveryChargeType() {
+            this.type = ORDER_TYPE_DELIVERY;
+            return this;
+        }
+
+        public OrderItemBuilder order(Order order) {
+            this.order = order;
+            return this;
+        }
+
+        public OrderItemBuilder orderDeliveryGroup(OrderDeliveryGroup orderDeliveryGroup) {
+            this.orderDeliveryGroup = orderDeliveryGroup;
+            return this;
         }
     }
 
