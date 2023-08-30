@@ -36,6 +36,7 @@ public with sharing class OrderBuilder {
     private final List<OrderBuilder.PaymentInfo> payments = new List<OrderBuilder.PaymentInfo>();
 
     private Boolean pricebookOptional = false;
+    private Boolean deliveryOrderItem = true;
 
     // default values
     private String taxLocaleType = 'Net';
@@ -83,8 +84,10 @@ public with sharing class OrderBuilder {
         // build order items
         OrderItem[] orderItems = buildOrderItems(order, orderDeliveryGroup);
 
-        OrderItem deliveryItem = createDeliveryOrderItem(order, orderDeliveryGroup);
-        orderItems.add(deliveryItem);
+        if (deliveryOrderItem) {
+            OrderItem deliveryItem = createDeliveryOrderItem(order, orderDeliveryGroup);
+            orderItems.add(deliveryItem);
+        }
 
         if (pricebookOptional) {
             setListPriceOnOrderItems(orderItems);
@@ -192,6 +195,11 @@ public with sharing class OrderBuilder {
 
     public OrderBuilder activated() {
         activateOrder = true;
+        return this;
+    }
+
+    public OrderBuilder noDeliveryItem() {
+        deliveryOrderItem = false;
         return this;
     }
 
