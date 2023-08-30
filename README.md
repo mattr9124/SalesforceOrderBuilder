@@ -1,18 +1,88 @@
-# Salesforce DX Project: Next Steps
+# Project Overview
 
-Now that you’ve created a Salesforce DX project, what’s next? Here are some documentation resources to get you started.
+This project is meant for Salesforce developers who are working on Salesforce Order Management projects. The goal is to easily create orders in a specific state using a fluent style API. 
 
-## How Do You Plan to Deploy Your Changes?
+This can be useful for:
+* Developing new features
+* Debugging issues
+* Creating unit tests
 
-Do you want to deploy a set of changes, or create a self-contained application? Choose a [development model](https://developer.salesforce.com/tools/vscode/en/user-guide/development-models).
+and hopefully more...
 
-## Configure Your Salesforce DX Project
+# Usage
 
-The `sfdx-project.json` file contains useful configuration information for your project. See [Salesforce DX Project Configuration](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_ws_config.htm) in the _Salesforce DX Developer Guide_ for details about this file.
+Examples that can be run as anonymous Apex with existing data in the Org.
 
-## Read All About It
+Simple order with a product and no payments:
+```apex
+Order order = OrderBuilder.newOrderBuilder()
+        .accountByName('Bob Jones')
+        .salesChannelByName('In Store')
+        .todayDates()
+        .addProductBySku('M12345', 2)
+        .deliveryMethodByName('DHL')
+        .shippingAndBillingAddress(getTestAddress())
+        .useStandardPricebook()
+        .build();
+```
 
-- [Salesforce Extensions Documentation](https://developer.salesforce.com/tools/vscode/)
-- [Salesforce CLI Setup Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_setup.meta/sfdx_setup/sfdx_setup_intro.htm)
-- [Salesforce DX Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_intro.htm)
-- [Salesforce CLI Command Reference](https://developer.salesforce.com/docs/atlas.en-us.sfdx_cli_reference.meta/sfdx_cli_reference/cli_reference.htm)
+An order with already captured payment:
+```apex
+OrderBuilder.newOrderBuilderWithDefaults()
+    .accountByName('Bob Jones')
+    .salesChannelByName('In Store')
+    .addProductBySku('M12345', 2)
+    .deliveryMethodByName('DHL')
+    .shippingAndBillingAddress(getTestAddress())
+    .paymentGateway(new PaymentGateway())
+    .addPaymentInfo(OrderBuilder.paymentBuilder()
+        .capturedCreditCard()
+        .gatewayReferenceNumber('PSP12345')
+        .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+    .build();
+```
+
+Order with multiple payment authorizations (payemnt with 2 cards for $50 and $25):
+```apex
+OrderBuilder.newOrderBuilderWithDefaults()
+    .accountByName('Bob Jones')
+    .salesChannelByName('In Store')
+    .addProductBySku('M12345', 2)
+    .deliveryMethodByName('DHL')
+    .shippingAndBillingAddress(getTestAddress())
+    .paymentGateway(new PaymentGateway())
+    .addPaymentInfo(OrderBuilder.paymentBuilder()
+        .authorizedCreditCard().amount(50)
+        .gatewayReferenceNumber('PSP12345')
+        .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+    .addPaymentInfo(OrderBuilder.paymentBuilder()
+        .authorizedCreditCard().amount(25)
+        .gatewayReferenceNumber('PSP54321')
+        .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+    .build();
+```
+
+# Installation
+
+For now it's just Apex. After a few iterations it was decided to contain it all in a single class. While I would have prefered a multi class design to better split things up, for deployment purposes it's much easier to just have a single class.
+
+You can deploy it to any Org using this command (or however you like to deploy Apex):
+```shell
+sfdx project deploy start -o <your_authorized_org_alias> -m "ApexClass:OrderBuilder"
+```
+
+Now you can create all the orders you like. 
+
+# Other Tools
+
+Be sure to check out the anonymous Apex [examples](scripts) in this repository.
+
+I have also included an OMS Connect Helper. This is just a collection of static methods that can be used to create order summaries, fulfillment orders and other Order Management objects. These are all things you can do directly via Connect API although if you've worked a lot with Connect API, it can be really verbose. The helper is there to make it less verbose and ultimately make the developer's life easier.
+
+# Contributions and Feedback
+
+Contributions are more than welcome, also I am very interested in user feedback. I want the API to be as easy and intuitive to use as possible. So something doesn't make sense we can change it for the better. 
+
+# Video Demo
+
+Coming soon - I'm working on a little YouTube demo so check back for that soon.
