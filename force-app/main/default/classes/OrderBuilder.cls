@@ -37,6 +37,7 @@ public with sharing class OrderBuilder {
 
     private Boolean pricebookOptional = false;
     private Boolean deliveryOrderItem = true;
+    private Boolean useAccountAddress = true;
 
     // default values
     private String taxLocaleType = 'Net';
@@ -55,6 +56,7 @@ public with sharing class OrderBuilder {
     public static OrderBuilder newOrderBuilderWithDefaults() {
         return new OrderBuilder()
                 .useRandomOrderName()
+                .useAccountAddress()
                 .useStandardPricebook()
                 .todayDates()
                 .activated();
@@ -69,6 +71,14 @@ public with sharing class OrderBuilder {
     }
 
     public Order build() {
+        
+        if (useAccountAddress) {
+            setAccountAddresses();
+//            Account accountWithAddress =  [SELECT Id FROM Account WHERE Id = :account.Id].Bill;
+            
+//            Schema.Address address = [SELECT Id FROM Account WHERE Id = :account.Id].Bill;
+        }
+        
         Order order = createOrder();
 
         if (!pricebookOptional) {
@@ -105,6 +115,35 @@ public with sharing class OrderBuilder {
         }
 
         return order;
+    }
+
+    private void setAccountAddresses() {
+        Account accountWithAddress = [SELECT
+                BillingStreet,
+                BillingCity,
+                BillingPostalCode,
+                BillingState,
+                BillingCountry,
+                ShippingStreet,
+                ShippingCity,
+                ShippingPostalCode,
+                ShippingState,
+                ShippingCountry
+        FROM Account WHERE Id = :account.Id];
+        
+        this.billingAddress = new Schema.Address(
+                        Street = accountWithAddress.BillingStreet,
+                        City = accountWithAddress.BillingCity,
+                        PostalCode = accountWithAddress.BillingPostalCode,
+                        State = accountWithAddress.BillingState,
+                        Country = accountWithAddress.BillingCountry);
+        
+        this.shippingAddress = new Schema.Address(
+                Street = accountWithAddress.ShippingStreet,
+                City = accountWithAddress.ShippingCity,
+                PostalCode = accountWithAddress.ShippingPostalCode,
+                State = accountWithAddress.ShippingState,
+                Country = accountWithAddress.ShippingCountry);
     }
 
     public OrderBuilder withExtraFields(Map<String, Object> extraFields) {
@@ -154,16 +193,24 @@ public with sharing class OrderBuilder {
         return pricebook([SELECT Id FROM Pricebook2 WHERE Name = :name]);
     }
 
+    public OrderBuilder useAccountAddress() {
+        this.useAccountAddress = true;
+        return this;
+    }
+    
     public OrderBuilder shippingAndBillingAddress(Schema.Address address) {
+        this.useAccountAddress = false;
         return shippingAddress(address).billingAddress(address);
     }
 
     public OrderBuilder shippingAddress(Schema.Address shippingAddress) {
+        this.useAccountAddress = false;
         this.shippingAddress = shippingAddress;
         return this;
     }
 
     public OrderBuilder billingAddress(Schema.Address billingAddress) {
+        this.useAccountAddress = false;
         this.billingAddress = billingAddress;
         return this;
     }
@@ -298,6 +345,11 @@ public with sharing class OrderBuilder {
                 BillingPostalCode = billingAddress.PostalCode,
                 BillingState = billingAddress.State,
                 BillingCountry = billingAddress.Country,
+                ShippingStreet = shippingAddress.Street,
+                ShippingCity = shippingAddress.City,
+                ShippingPostalCode = shippingAddress.PostalCode,
+                ShippingState = shippingAddress.State,
+                ShippingCountry = shippingAddress.Country,
                 CurrencyIsoCode = account.CurrencyIsoCode
         );
         return order;

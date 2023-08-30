@@ -55,6 +55,33 @@ private class OrderBuilderTest {
     }
 
     @IsTest
+    static void buildOrderWithAccountAddress() {
+        // setup: Create some test data
+        TestDataFactory.createBasicTestData();
+
+        //when: building an order with 1 product of quantity 2
+        Order order = OrderBuilder.newOrderBuilder()
+                .accountByName('Bob Jones')
+                .salesChannelByName('In Store')
+                .todayDates()
+                .addProductBySku('M12345', 2)
+                .deliveryMethodByName('DHL')
+                .useAccountAddress()
+                .useStandardPricebook()
+                .build();
+
+        //then: an order should be created with account address
+
+        //refetch
+        order = refetchOrder(order);
+
+        Assert.isNotNull(order.OrderDeliveryGroups[0].DeliverToAddress, 'shipping address on delivery group is null');
+        Assert.isNotNull(order.BillingAddress, 'billing address is null');
+        Assert.isNotNull(order.ShippingAddress, 'shipping address is null');
+
+    }
+
+    @IsTest
     static void basicWithDefaultValues() {
         // setup: Create some test data
         TestDataFactory.createBasicTestData();
@@ -237,7 +264,7 @@ private class OrderBuilderTest {
 
         Assert.areEqual(orderItem.Product2Id, [SELECT Id FROM Product2 WHERE ProductCode = 'M12345'].Id, 'wrong or missing SKU');
         Assert.areEqual(orderItem.Quantity, 2, 'wrong quantity');
-        Assert.areEqual(orderItem.Type, 'Order Product', 'wrong order item type');
+        Assert.areEqual(OrderItem.Type, 'Order Product', 'wrong order item type');
 
     }
 
@@ -245,11 +272,10 @@ private class OrderBuilderTest {
         return [
                 SELECT Name, OrderNumber, Account.Name, Pricebook2.Name, SalesChannel.SalesChannelName,
                         GrandTotalAmount, Description,
-                        TaxLocaleType, Status, OrderedDate, EffectiveDate, OrderReferenceNumber,
-                        BillingStreet, BillingCity, BillingPostalCode, BillingState, BillingCountry, (
-                        SELECT Product2.Name, Product2.ProductCode, UnitPrice, Quantity, TotalPrice, Type
+                        TaxLocaleType, Status, OrderedDate, EffectiveDate, OrderReferenceNumber, BillingAddress, ShippingAddress,
+                        (SELECT Product2.Name, Product2.ProductCode, UnitPrice, Quantity, TotalPrice, Type
                         FROM OrderItems
-                )
+                ), (SELECT  DeliverToAddress FROM OrderDeliveryGroups)
                 FROM Order
                 WHERE Id = :order.Id
         ];

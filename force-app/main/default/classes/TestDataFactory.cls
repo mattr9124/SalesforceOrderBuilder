@@ -9,7 +9,21 @@ public class TestDataFactory {
     public final static Id FAKE_ORDER_DELIVERY_GROUP_ID = '2Dg1q000000Ccv9CAC';
 
     public static void createBasicTestData() {
-        Account account = new Account(Name = 'Bob Jones');
+        Account account = new Account(
+                Name = 'Bob Jones',
+                BillingStreet = 'TestBilling',
+                BillingCity = 'TestBilling',
+                BillingPostalCode = '12345',
+                BillingState = 'NY',
+                BillingCountry = 'US',
+                ShippingStreet = 'TestShipping',
+                ShippingCity = 'TestShipping',
+                ShippingPostalCode = '12345',
+                ShippingState = 'NY',
+                ShippingCountry = 'US'
+
+        );
+
         SalesChannel salesChannel = new SalesChannel(SalesChannelName = 'In Store');
         Product2 product2 = new Product2(
                 Name = 'Test product1',
@@ -22,7 +36,9 @@ public class TestDataFactory {
                 StockKeepingUnit = 'DHL',
                 ProductCode = 'DHL'
         );
-        insert new SObject[] {account, salesChannel, product2, deliveryProduct};
+        insert new SObject[]{
+                account, salesChannel, product2, deliveryProduct
+        };
 
         PricebookEntry pricebookEntry = new PricebookEntry(
                 Product2Id = product2.Id,
@@ -41,6 +57,8 @@ public class TestDataFactory {
                 ProductId = deliveryProduct.Id
         );
 
-        insert new SObject[] {pricebookEntry, deliveryPricebookEntry, orderDeliveryMethod};
+        insert new SObject[]{
+                pricebookEntry, deliveryPricebookEntry, orderDeliveryMethod
+        };
     }
 }

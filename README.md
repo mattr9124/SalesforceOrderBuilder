@@ -17,11 +17,11 @@ Simple order with a product and no payments:
 ```apex
 Order order = OrderBuilder.newOrderBuilder()
         .accountByName('Bob Jones')
+        .useAccountAddress()
         .salesChannelByName('In Store')
         .todayDates()
         .addProductBySku('M12345', 2)
         .deliveryMethodByName('DHL')
-        .shippingAndBillingAddress(getTestAddress())
         .useStandardPricebook()
         .build();
 ```
@@ -33,7 +33,6 @@ OrderBuilder.newOrderBuilderWithDefaults()
     .salesChannelByName('In Store')
     .addProductBySku('M12345', 2)
     .deliveryMethodByName('DHL')
-    .shippingAndBillingAddress(getTestAddress())
     .paymentGateway(new PaymentGateway())
     .addPaymentInfo(OrderBuilder.paymentBuilder()
         .capturedCreditCard()
