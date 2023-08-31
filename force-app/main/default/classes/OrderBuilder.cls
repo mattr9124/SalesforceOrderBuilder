@@ -70,15 +70,16 @@ public with sharing class OrderBuilder {
         return new PaymentInfo();
     }
 
+    public static ProductBuilder productBySku(String sku, Integer quantity) {
+        return new ProductBuilder(sku, quantity);
+    }
+
     public Order build() {
-        
+
         if (useAccountAddress) {
             setAccountAddresses();
-//            Account accountWithAddress =  [SELECT Id FROM Account WHERE Id = :account.Id].Bill;
-            
-//            Schema.Address address = [SELECT Id FROM Account WHERE Id = :account.Id].Bill;
         }
-        
+
         Order order = createOrder();
 
         if (!pricebookOptional) {
@@ -130,20 +131,25 @@ public with sharing class OrderBuilder {
                 ShippingState,
                 ShippingCountry
         FROM Account WHERE Id = :account.Id];
-        
+
         this.billingAddress = new Schema.Address(
                         Street = accountWithAddress.BillingStreet,
                         City = accountWithAddress.BillingCity,
                         PostalCode = accountWithAddress.BillingPostalCode,
                         State = accountWithAddress.BillingState,
                         Country = accountWithAddress.BillingCountry);
-        
+
         this.shippingAddress = new Schema.Address(
                 Street = accountWithAddress.ShippingStreet,
                 City = accountWithAddress.ShippingCity,
                 PostalCode = accountWithAddress.ShippingPostalCode,
                 State = accountWithAddress.ShippingState,
                 Country = accountWithAddress.ShippingCountry);
+    }
+
+    public OrderBuilder addProduct(ProductBuilder productBuilder) {
+        this.productWrappers.add(productBuilder);
+        return this;
     }
 
     public OrderBuilder withExtraFields(Map<String, Object> extraFields) {
@@ -247,16 +253,6 @@ public with sharing class OrderBuilder {
 
     public OrderBuilder noDeliveryItem() {
         deliveryOrderItem = false;
-        return this;
-    }
-
-    public OrderBuilder addProductBySku(String sku, Integer quantity) {
-        productWrappers.add(new ProductBuilder(sku, quantity));
-        return this;
-    }
-
-    public OrderBuilder addProductBySkuWithPrice(String sku, Integer quantity, Decimal unitPrice) {
-        productWrappers.add(new ProductBuilder(sku, quantity, unitPrice));
         return this;
     }
 
@@ -425,6 +421,7 @@ public with sharing class OrderBuilder {
                             .orderDeliveryGroup(orderDeliveryGroup)
                             .productBySku(productWrapper.sku, productWrapper.quantity)
                             .unitPrice(productWrapper.unitPrice)
+                            .withExtraFields(productWrapper.extraFields)
                             .build());
 
         }
@@ -449,7 +446,7 @@ public with sharing class OrderBuilder {
         return orderDeliveryGroup;
     }
 
-    private void setExtraFields(SObject theObject, Map<String, Object> extraFields) {
+    private static void setExtraFields(SObject theObject, Map<String, Object> extraFields) {
         for (String key : extraFields.keySet()) {
             theObject.put(key, extraFields.get(key));
         }
@@ -529,68 +526,6 @@ public with sharing class OrderBuilder {
         return new OrderItemBuilder().order(order);
     }
 
-    public class OrderItemBuilder {
-        private Product2 product2;
-        private Integer quantity;
-        private Decimal unitPrice;
-        private Order order;
-        private OrderDeliveryGroup orderDeliveryGroup;
-        private String type = ORDER_TYPE_PRODUCT;
-
-        OrderItemBuilder() {
-        }
-
-        public OrderItem build() {
-            OrderItem orderItem = new OrderItem(
-                    Product2Id = product2.Id,
-                    Quantity = quantity,
-                    OrderId = order.Id,
-                    OrderDeliveryGroupId = orderDeliveryGroup.Id,
-                    Type = type
-            );
-
-            if (unitPrice != null && unitPrice > 0) {
-                orderItem.UnitPrice = unitPrice;
-                orderItem.TotalLineAmount = unitPrice * quantity; // TODO this logic is duplicated - find a better way
-            }
-
-            return orderItem;
-        }
-
-        public OrderItemBuilder productBySku(String sku, Integer quantity) {
-            return product(
-                    [SELECT Id FROM Product2 WHERE StockKeepingUnit = :sku OR ProductCode = :sku LIMIT 1],
-                    quantity
-            );
-        }
-
-        public OrderItemBuilder product(Product2 product2, Integer quantity) {
-            this.product2 = product2;
-            this.quantity = quantity;
-            return this;
-        }
-
-        public OrderItemBuilder unitPrice(Decimal unitPrice) {
-            this.unitPrice = unitPrice;
-            return this;
-        }
-
-        public OrderItemBuilder deliveryChargeType() {
-            this.type = ORDER_TYPE_DELIVERY;
-            return this;
-        }
-
-        public OrderItemBuilder order(Order order) {
-            this.order = order;
-            return this;
-        }
-
-        public OrderItemBuilder orderDeliveryGroup(OrderDeliveryGroup orderDeliveryGroup) {
-            this.orderDeliveryGroup = orderDeliveryGroup;
-            return this;
-        }
-    }
-
     public class PaymentInfo {
         private E_PaymentType paymentType;
         private E_CreditCardMethod creditCardMethod;
@@ -647,25 +582,112 @@ public with sharing class OrderBuilder {
             return this;
         }
 
+        public PaymentInfo withExtraField(String fieldName, Object value) {
+            this.extraFields.put(fieldName, value);
+            return this;
+        }
+
         public PaymentInfo withExtraFields(Map<String, Object> extraFields) {
             this.extraFields.putAll(extraFields);
             return this;
         }
     }
 
-    private class ProductBuilder {
-        final String sku;
-        final Integer quantity;
-        final Decimal unitPrice;
+    public class ProductBuilder {
+        private final String sku;
+        private final Integer quantity;
+        private Decimal unitPrice;
+        private final Map<String, Object> extraFields = new Map<String, Object>();
 
-        ProductBuilder(String sku, Integer quantity) {
-            this(sku, quantity, 0);
-        }
-
-        ProductBuilder(String sku, Integer quantity, Decimal unitPrice) {
+        public ProductBuilder(String sku, Integer quantity) {
             this.sku = sku;
             this.quantity = quantity;
+        }
+
+        public ProductBuilder price(Decimal unitPrice) {
             this.unitPrice = unitPrice;
+            return this;
+        }
+
+        public ProductBuilder withExtraField(String fieldName, Object value) {
+            this.extraFields.put(fieldName, value);
+            return this;
+        }
+
+        public ProductBuilder withExtraFields(Map<String, Object> extraFields) {
+            this.extraFields.putAll(extraFields);
+            return this;
+        }
+    }
+
+    private class OrderItemBuilder {
+        private Product2 product2;
+        private Integer quantity;
+        private Decimal unitPrice;
+        private Order order;
+        private OrderDeliveryGroup orderDeliveryGroup;
+        private String type = ORDER_TYPE_PRODUCT;
+
+        private final Map<String, Object> extraFields = new Map<String, Object>();
+
+        OrderItemBuilder() {
+        }
+
+        OrderItem build() {
+            OrderItem orderItem = new OrderItem(
+                    Product2Id = product2.Id,
+                    Quantity = quantity,
+                    OrderId = order.Id,
+                    OrderDeliveryGroupId = orderDeliveryGroup.Id,
+                    Type = type
+            );
+
+            if (unitPrice != null && unitPrice > 0) {
+                orderItem.UnitPrice = unitPrice;
+                orderItem.TotalLineAmount = unitPrice * quantity; // TODO this logic is duplicated - find a better way
+            }
+
+            setExtraFields(orderItem, this.extraFields);
+
+            return orderItem;
+        }
+
+        OrderItemBuilder productBySku(String sku, Integer quantity) {
+            return product(
+                    [SELECT Id FROM Product2 WHERE StockKeepingUnit = :sku OR ProductCode = :sku LIMIT 1],
+                    quantity
+            );
+        }
+
+        OrderItemBuilder product(Product2 product2, Integer quantity) {
+            this.product2 = product2;
+            this.quantity = quantity;
+            return this;
+        }
+
+        OrderItemBuilder unitPrice(Decimal unitPrice) {
+            this.unitPrice = unitPrice;
+            return this;
+        }
+
+        OrderItemBuilder deliveryChargeType() {
+            this.type = ORDER_TYPE_DELIVERY;
+            return this;
+        }
+
+        OrderItemBuilder order(Order order) {
+            this.order = order;
+            return this;
+        }
+
+        OrderItemBuilder orderDeliveryGroup(OrderDeliveryGroup orderDeliveryGroup) {
+            this.orderDeliveryGroup = orderDeliveryGroup;
+            return this;
+        }
+
+        OrderItemBuilder withExtraFields(Map<String, Object> extraFields) {
+            this.extraFields.putAll(extraFields);
+            return this;
         }
     }
 

@@ -12,7 +12,7 @@ private class OrderBuilderTest {
                 .accountByName('Bob Jones')
                 .salesChannelByName('In Store')
                 .todayDates()
-                .addProductBySku('M12345', 2)
+                .addProduct(OrderBuilder.productBySku('M12345', 2))
                 .deliveryMethodByName('DHL')
                 .shippingAndBillingAddress(getTestAddress())
                 .useStandardPricebook()
@@ -64,7 +64,7 @@ private class OrderBuilderTest {
                 .accountByName('Bob Jones')
                 .salesChannelByName('In Store')
                 .todayDates()
-                .addProductBySku('M12345', 2)
+                .addProduct(OrderBuilder.productBySku('M12345', 2))
                 .deliveryMethodByName('DHL')
                 .useAccountAddress()
                 .useStandardPricebook()
@@ -90,7 +90,7 @@ private class OrderBuilderTest {
         Order order = OrderBuilder.newOrderBuilderWithDefaults()
                 .accountByName('Bob Jones')
                 .salesChannelByName('In Store')
-                .addProductBySku('M12345', 2)
+                .addProduct(OrderBuilder.productBySku('M12345', 2))
                 .deliveryMethodByName('DHL')
                 .shippingAndBillingAddress(getTestAddress())
                 .build();
@@ -119,7 +119,7 @@ private class OrderBuilderTest {
         Order order = OrderBuilder.newOrderBuilderWithDefaults()
                 .accountByName('Bob Jones')
                 .salesChannelByName('In Store')
-                .addProductBySku('M12345', 1)
+                .addProduct(OrderBuilder.productBySku('M12345', 1))
                 .deliveryMethodByName('DHL')
                 .shippingAndBillingAddress(getTestAddress())
                 .withExtraFields(new Map<String, Object> {'Description' => description})
@@ -244,7 +244,7 @@ private class OrderBuilderTest {
         OrderBuilder builderForPayment = OrderBuilder.newOrderBuilderWithDefaults()
                 .accountByName('Bob Jones')
                 .salesChannelByName('In Store')
-                .addProductBySku('M12345', 2)
+                .addProduct(OrderBuilder.productBySku('M12345', 2))
                 .deliveryMethodByName('DHL')
                 .shippingAndBillingAddress(getTestAddress())
                 .paymentGateway(new PaymentGateway());
@@ -261,7 +261,7 @@ private class OrderBuilderTest {
                 .accountByName('Bob Jones')
                 .salesChannelByName('In Store')
                 .todayDates()
-                .addProductBySkuWithPrice('M12345', 2, 10)
+                .addProduct(OrderBuilder.productBySku('M12345', 2).price(10))
                 .deliveryMethodByNameWithPrice('DHL', 2)
                 .shippingAndBillingAddress(getTestAddress())
                 .noPricebook()
@@ -277,31 +277,6 @@ private class OrderBuilderTest {
         Assert.isNotNull(orderItems);
         Assert.isTrue(orderItems.size() == 2, 'There should be 2 order item');
 
-
-    }
-
-    @IsTest
-    static void buildOrderItem() {
-        // setup: create test data
-        TestDataFactory.createBasicTestData();
-        // and: create dummy objects
-        Order order = new Order(Id = TestDataFactory.FAKE_ORDER_ID);
-        OrderDeliveryGroup orderDeliveryGroup = new OrderDeliveryGroup(Id = TestDataFactory.FAKE_ORDER_DELIVERY_GROUP_ID);
-
-        // when: creating an order item
-        OrderItem orderItem = OrderBuilder.newOrderItemBuilder(order)
-                .productBySku('M12345', 2)
-                .orderDeliveryGroup(orderDeliveryGroup)
-                .build();
-
-        // then: order item should match
-
-        Assert.isNotNull(orderItem);
-        Assert.isNotNull(orderItem.Product2Id);
-
-        Assert.areEqual(orderItem.Product2Id, [SELECT Id FROM Product2 WHERE ProductCode = 'M12345'].Id, 'wrong or missing SKU');
-        Assert.areEqual(orderItem.Quantity, 2, 'wrong quantity');
-        Assert.areEqual(OrderItem.Type, 'Order Product', 'wrong order item type');
 
     }
 
