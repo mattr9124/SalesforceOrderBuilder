@@ -145,7 +145,7 @@ private class OrderBuilderTest {
                 .addPaymentInfo(OrderBuilder.paymentBuilder()
                     .capturedCreditCard()
                     .gatewayReferenceNumber('PSP12345')
-                    .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+                    .withExtraField('GatewayResultCode', '[accepted]'))
                 .build();
 
         //then: order should have a payment with capture and correct values

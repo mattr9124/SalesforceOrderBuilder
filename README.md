@@ -20,7 +20,7 @@ Order order = OrderBuilder.newOrderBuilder()
         .useAccountAddress()
         .salesChannelByName('In Store')
         .todayDates()
-        .addProductBySku('M12345', 2)
+        .addProduct(OrderBuilder.productBySku('M12345', 2))
         .deliveryMethodByName('DHL')
         .useStandardPricebook()
         .build();
@@ -31,13 +31,13 @@ An order with already captured payment:
 OrderBuilder.newOrderBuilderWithDefaults()
     .accountByName('Bob Jones')
     .salesChannelByName('In Store')
-    .addProductBySku('M12345', 2)
+    .addProduct(OrderBuilder.productBySku('M12345', 2))
     .deliveryMethodByName('DHL')
     .paymentGateway(new PaymentGateway())
     .addPaymentInfo(OrderBuilder.paymentBuilder()
         .capturedCreditCard()
         .gatewayReferenceNumber('PSP12345')
-        .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+        .withExtraField('GatewayResultCode', '[accepted]'))
     .build();
 ```
 
@@ -46,18 +46,18 @@ Order with multiple payment authorizations (payment with 2 cards for $50 and $25
 OrderBuilder.newOrderBuilderWithDefaults()
     .accountByName('Bob Jones')
     .salesChannelByName('In Store')
-    .addProductBySku('M12345', 2)
+    .addProduct(OrderBuilder.productBySku('M12345', 2))
     .deliveryMethodByName('DHL')
     .shippingAndBillingAddress(getTestAddress())
     .paymentGateway(new PaymentGateway())
     .addPaymentInfo(OrderBuilder.paymentBuilder()
         .authorizedCreditCard().paymentAmount(50)
         .gatewayReferenceNumber('PSP12345')
-        .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+        .withExtraField('GatewayResultCode', '[accepted]'))
     .addPaymentInfo(OrderBuilder.paymentBuilder()
         .authorizedCreditCard().paymentAmount(25)
         .gatewayReferenceNumber('PSP54321')
-        .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
+        .withExtraField('GatewayResultCode', '[accepted]'))
     .build();
 ```
 

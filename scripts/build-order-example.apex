@@ -29,7 +29,7 @@ try {
             )
             )
             .todayDates()
-            .addProductBySku('M12345', 2)
+            .addProduct(OrderBuilder.productBySku('M12345', 2))
             .anyPaymentGateway()
             .useStandardPricebook()
             .addPaymentInfo(

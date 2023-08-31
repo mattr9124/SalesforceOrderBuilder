@@ -27,7 +27,7 @@ try {
                     Country = 'US'
             )
             )
-            .addProductBySku('M12345', 2)
+            .addProduct(OrderBuilder.productBySku('M12345', 2))
             .anyPaymentGateway()
             .addPaymentInfo(
                     OrderBuilder.paymentBuilder()
