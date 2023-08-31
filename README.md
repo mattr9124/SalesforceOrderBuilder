@@ -20,10 +20,45 @@ Order order = OrderBuilder.newOrderBuilder()
         .useAccountAddress()
         .salesChannelByName('In Store')
         .todayDates()
-        .addProduct(OrderBuilder.productBySku('M12345', 2))
+        .addProduct(OrderBuilder.productBySku('M12345', 2)) // will look up product price in the standard pricebook
         .deliveryMethodByName('DHL')
         .useStandardPricebook()
         .build();
+```
+
+Get a default order builder, which will return the following: 
+```apex
+OrderBuilder.newOrderBuilderWithDefaults();
+// returns the following
+OrderBuilder()
+    .useRandomOrderName()
+    .useAccountAddress()
+    .useStandardPricebook()
+    .todayDates()
+    .activated();
+```
+
+Add extra fields (for example custom fields:
+```apex
+OrderBuilder.newOrderBuilderWithDefaults()
+    .accountByName('Bob Jones')
+    .salesChannelByName('In Store')
+    .withExtraField('My_Custom_Field1__c', 'value1')
+    .withExtraField('My_Custom_Field2__c', 'value2')
+    .addProduct(OrderBuilder.productBySku('M12345', 2).withExtraField('Item_Custom_Field__c', 'value3'))
+    .build();
+```
+
+If you have many extra fields to add you can also pass in a Map instead:
+```apex
+OrderBuilder.newOrderBuilderWithDefaults()
+    .withExtraFields(new Map<String, Object> {
+            'My_Custom_Field1__c' => 'value1',
+            'My_Custom_Field2__c' => 'value1',
+            'My_Custom_NumericField__c' => 25
+    })
+    //...
+    .build();
 ```
 
 An order with already captured payment:
@@ -33,25 +68,25 @@ OrderBuilder.newOrderBuilderWithDefaults()
     .salesChannelByName('In Store')
     .addProduct(OrderBuilder.productBySku('M12345', 2))
     .deliveryMethodByName('DHL')
-    .paymentGateway(new PaymentGateway())
-    .addPaymentInfo(OrderBuilder.paymentBuilder()
+    .paymentGatewayByName('Adyen')
+    .addPaymentInfo(OrderBuilder.paymentBuilder() // will set the payment amount to the order total 
         .capturedCreditCard()
         .gatewayReferenceNumber('PSP12345')
-        .withExtraField('GatewayResultCode', '[accepted]'))
+        .withExtraField('GatewayResultCode', '[accepted]')) // add extra fields
     .build();
 ```
 
-Order with multiple payment authorizations (payment with 2 cards for $50 and $25):
+Order with multiple payment authorizations (payment with 2 cards for $50 and $30):
 ```apex
 OrderBuilder.newOrderBuilderWithDefaults()
     .accountByName('Bob Jones')
     .salesChannelByName('In Store')
-    .addProduct(OrderBuilder.productBySku('M12345', 2))
+    .addProduct(OrderBuilder.productBySku('M12345', 2).price(40)) // overrides unit price to 40 
     .deliveryMethodByName('DHL')
     .shippingAndBillingAddress(getTestAddress())
-    .paymentGateway(new PaymentGateway())
+    .paymentGatewayByName('Adyen')
     .addPaymentInfo(OrderBuilder.paymentBuilder()
-        .authorizedCreditCard().paymentAmount(50)
+        .authorizedCreditCard().paymentAmount(50) // explicitly set the payment amount
         .gatewayReferenceNumber('PSP12345')
         .withExtraField('GatewayResultCode', '[accepted]'))
     .addPaymentInfo(OrderBuilder.paymentBuilder()
