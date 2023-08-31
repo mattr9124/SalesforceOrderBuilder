@@ -85,7 +85,6 @@ public with sharing class OmsConnectHelper {
                 SELECT Id, Quantity
                 FROM OrderItemSummary
                 WHERE OrderSummaryId = :orderSummaryId
-                AND TypeCode = 'Product'
         ]
         }, location, fulfillmentType);
     }
