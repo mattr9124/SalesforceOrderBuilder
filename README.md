@@ -41,7 +41,7 @@ OrderBuilder.newOrderBuilderWithDefaults()
     .build();
 ```
 
-Order with multiple payment authorizations (payemnt with 2 cards for $50 and $25):
+Order with multiple payment authorizations (payment with 2 cards for $50 and $25):
 ```apex
 OrderBuilder.newOrderBuilderWithDefaults()
     .accountByName('Bob Jones')
@@ -51,11 +51,11 @@ OrderBuilder.newOrderBuilderWithDefaults()
     .shippingAndBillingAddress(getTestAddress())
     .paymentGateway(new PaymentGateway())
     .addPaymentInfo(OrderBuilder.paymentBuilder()
-        .authorizedCreditCard().amount(50)
+        .authorizedCreditCard().paymentAmount(50)
         .gatewayReferenceNumber('PSP12345')
         .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
     .addPaymentInfo(OrderBuilder.paymentBuilder()
-        .authorizedCreditCard().amount(25)
+        .authorizedCreditCard().paymentAmount(25)
         .gatewayReferenceNumber('PSP54321')
         .withExtraFields(new Map<String, Object>{'GatewayResultCode' => '[accepted]'}))
     .build();
@@ -63,7 +63,7 @@ OrderBuilder.newOrderBuilderWithDefaults()
 
 # Installation
 
-For now it's just Apex. After a few iterations it was decided to contain it all in a single class. While I would have prefered a multi class design to better split things up, for deployment purposes it's much easier to just have a single class.
+For now it's just Apex. After a few iterations it was decided to contain it all in a single class. While I would have preferred a multi class design to better split things up, for deployment purposes it's much easier to just have a single class.
 
 You can deploy it to any Org using this command (or however you like to deploy Apex):
 ```shell

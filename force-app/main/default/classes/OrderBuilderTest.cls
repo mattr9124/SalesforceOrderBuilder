@@ -175,7 +175,7 @@ private class OrderBuilderTest {
         TestDataFactory.createBasicTestData();
 
         //when: building an order with payment info
-        // and: with credit card + capture
+        // and: with authorized CC
         Order order = getBuilderForPaymentTest()
                 .addPaymentInfo(OrderBuilder.paymentBuilder()
                     .authorizedCreditCard()
@@ -195,12 +195,49 @@ private class OrderBuilderTest {
         ];
 
         Assert.isNotNull(paymentAuthorizations);
-        Assert.isTrue(paymentAuthorizations.size() == 1, 'should be exactly 1 payment authroziation line');
+        Assert.isTrue(paymentAuthorizations.size() == 1, 'should be exactly 1 payment authorization line');
         Assert.areEqual('Processed', paymentAuthorizations[0].Status);
         Assert.areEqual('External', paymentAuthorizations[0].ProcessingMode);
         Assert.areEqual('[accepted]', paymentAuthorizations[0].GatewayResultCode);
         Assert.areEqual('PSP12345', paymentAuthorizations[0].GatewayRefNumber);
         Assert.areEqual(202.99, paymentAuthorizations[0].Amount);
+    }
+
+    @IsTest
+    static void buildOrderWithMultiplePaymentAuths() {
+        // setup: Create some test data
+        TestDataFactory.createBasicTestData();
+
+        //when: building an order with payment info
+        // and: with 2 authorized CC (split payment)
+        Order order = getBuilderForPaymentTest()
+                .addPaymentInfo(OrderBuilder.paymentBuilder()
+                        .authorizedCreditCard().paymentAmount(54.99)
+                        .gatewayReferenceNumber('PSP12345')
+                        .withExtraFields(new Map<String, Object> {'GatewayResultCode' => '[accepted]'}))
+                .addPaymentInfo(OrderBuilder.paymentBuilder()
+                        .authorizedCreditCard().paymentAmount(148)
+                        .gatewayReferenceNumber('PSP54321')
+                        .withExtraFields(new Map<String, Object> {'GatewayResultCode' => '[accepted]'}))
+                .build();
+
+        //then: order should have a payment with capture and correct values
+        PaymentAuthorization [] paymentAuthorizations = [
+                SELECT Amount, GatewayRefNumber
+                FROM PaymentAuthorization
+                WHERE PaymentGroupId IN (
+                        SELECT Id
+                        FROM PaymentGroup
+                        WHERE SourceObjectId = :order.Id
+                )
+        ];
+
+        Assert.isNotNull(paymentAuthorizations);
+        Assert.isTrue(paymentAuthorizations.size() == 2, 'should be exactly 2 payment authorization lines');
+        Assert.areEqual('PSP12345', paymentAuthorizations[0].GatewayRefNumber);
+        Assert.areEqual('PSP54321', paymentAuthorizations[1].GatewayRefNumber);
+        Assert.areEqual(54.99, paymentAuthorizations[0].Amount);
+        Assert.areEqual(148, paymentAuthorizations[1].Amount);
     }
 
     private static OrderBuilder getBuilderForPaymentTest() {
