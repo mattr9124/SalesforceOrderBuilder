@@ -1,3 +1,33 @@
+/*
+MIT License
+
+Copyright (c) 2023 Matthew B. Rossner
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+ */
+/**
+ * Order Builder is a fluent style API to create orders for testing
+ * Salesforce Order Management. This should generally never be used
+ * in production but should be used to build Apex unit tests and also
+ * as part of anonymous Apex scripts to test specific scenarios.
+ *
+ */
 public with sharing class OrderBuilder {
 
     /*
@@ -53,6 +83,26 @@ public with sharing class OrderBuilder {
     private OrderBuilder() {
     }
 
+    /**
+     * Creates a new Order Builder
+     * @return
+     */
+    public static OrderBuilder newOrderBuilder() {
+        return new OrderBuilder();
+    }
+
+    /**
+     * Creates a new OrderBuilder with some default settings:
+     * <ul>
+     *     <li>Random order name</li>
+     *     <li>Use account address</li>
+     *     <li>Use standard pricebook</li>
+     *     <li>Use today dates</li>
+     *     <li>Activate the order immediately</li>
+     * </ul>
+     *
+     * @return
+     */
     public static OrderBuilder newOrderBuilderWithDefaults() {
         return new OrderBuilder()
                 .useRandomOrderName()
@@ -62,18 +112,39 @@ public with sharing class OrderBuilder {
                 .activated();
     }
 
-    public static OrderBuilder newOrderBuilder() {
-        return new OrderBuilder();
-    }
-
+    /**
+     * Creates a new payment builder
+     * @return
+     */
     public static PaymentInfo paymentBuilder() {
         return new PaymentInfo();
     }
 
+    /**
+     * Creates a product builder for a given SKU and quantity
+     * @param sku Product SKU - will match either Product2.StockKeepingUnit or Product2.ProductCode)
+     * @param quantity Order item quantity
+     *
+     * @return
+     */
     public static ProductBuilder productBySku(String sku, Integer quantity) {
         return new ProductBuilder(sku, quantity);
     }
 
+    /**
+     * Will build the order based on the inputs given. This will perform
+     * all the necessary DML.
+     *
+     * Currently there is no validation for required fields and no error
+     * handling, so this will throw various exceptions for missing fields
+     * and potentially null pointer exceptions if certain important
+     * elements are missing. In future versions (time-permitting) some
+     * validations will be added to provide more meaningful error messages
+     * in such cases. Although if all required fields are added then everything
+     * should work as expected.
+     *
+     * @return
+     */
     public Order build() {
 
         if (useAccountAddress) {
