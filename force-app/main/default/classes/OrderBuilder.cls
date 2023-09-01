@@ -46,14 +46,19 @@ public with sharing class OrderBuilder {
     public final static String ORDER_TYPE_PRODUCT = 'Order Product';
     public final static String ORDER_TYPE_DELIVERY = 'Delivery Charge';
 
+    private final Datetime now = Datetime.now();
+    private final Date today = now.date();
+
+    private final List<ProductBuilder> productWrappers = new List<ProductBuilder>();
+    private final List<OrderBuilder.PaymentInfo> payments = new List<OrderBuilder.PaymentInfo>();
+
+    private final Map<String, Object> extraOrderFields = new Map<String, Object>();
+
     private Account account;
     private Pricebook2 pricebook2;
     private SalesChannel salesChannel;
     private OrderDeliveryMethod orderDeliveryMethod;
     private Decimal deliveryPrice;
-    private Datetime now = Datetime.now();
-    private Date today = now.date();
-
     private Date effectiveDate;
     private Datetime orderedDate;
     private Schema.Address shippingAddress;
@@ -61,9 +66,6 @@ public with sharing class OrderBuilder {
 
     private String orderName;
     private String orderReferenceNumber;
-
-    private final List<ProductBuilder> productWrappers = new List<ProductBuilder>();
-    private final List<OrderBuilder.PaymentInfo> payments = new List<OrderBuilder.PaymentInfo>();
 
     private Boolean pricebookOptional = false;
     private Boolean deliveryOrderItem = true;
@@ -77,8 +79,6 @@ public with sharing class OrderBuilder {
     private Boolean activateOrder = false;
 
     private PaymentGateway paymentGateway;
-
-    private final Map<String, Object> extraOrderFields = new Map<String, Object>();
 
     private OrderBuilder() {
     }
