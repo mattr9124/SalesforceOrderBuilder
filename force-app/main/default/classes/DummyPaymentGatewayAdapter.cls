@@ -28,13 +28,16 @@ public with sharing class DummyPaymentGatewayAdapter implements CommercePayments
         CommercePayments.GatewayResponse handlePaymentRequest(CommercePayments.PaymentGatewayRequest paymentRequest);
     }
 
+    private final static CommercePayments.SalesforceResultCodeInfo SUCCESS = new CommercePayments.SalesforceResultCodeInfo(CommercePayments.SalesforceResultCode.Success);
+
     class CaptureHandler implements PaymentRequestHandler {
         public CommercePayments.GatewayResponse handlePaymentRequest(CommercePayments.PaymentGatewayRequest paymentRequest) {
             CommercePayments.CaptureRequest captureRequest = (CommercePayments.CaptureRequest) paymentRequest;
             CommercePayments.CaptureResponse captureResponse = new CommercePayments.CaptureResponse();
-            captureResponse.setSalesforceResultCodeInfo(new CommercePayments.SalesforceResultCodeInfo(CommercePayments.SalesforceResultCode.Success));
+
+            captureResponse.setSalesforceResultCodeInfo(SUCCESS);
             captureResponse.setAmount(captureRequest.amount);
-            captureResponse.setGatewayReferenceNumber(String.valueOf((Math.random() * 99999999999L).longValue()));
+            captureResponse.setGatewayReferenceNumber(generateRandomRefNumber());
             captureResponse.setGatewayResultCode('[accepted]');
             captureResponse.setGatewayMessage('Dummy adapter - always accepts');
             return captureResponse;
@@ -43,8 +46,20 @@ public with sharing class DummyPaymentGatewayAdapter implements CommercePayments
 
     class RefundHandler implements PaymentRequestHandler {
         public CommercePayments.GatewayResponse handlePaymentRequest(CommercePayments.PaymentGatewayRequest paymentRequest) {
-            // TODO implement this
-            throw new PaymentException('Refund not yet implemented...');
+            CommercePayments.ReferencedRefundRequest refundRequest = (CommercePayments.ReferencedRefundRequest) paymentRequest;
+            CommercePayments.ReferencedRefundResponse referencedRefundResponse = new CommercePayments.ReferencedRefundResponse();
+
+            referencedRefundResponse.setSalesforceResultCodeInfo(SUCCESS);
+            referencedRefundResponse.setAmount(refundRequest.amount);
+            referencedRefundResponse.setGatewayReferenceNumber(generateRandomRefNumber());
+            referencedRefundResponse.setGatewayResultCode('[accepted]');
+            referencedRefundResponse.setGatewayMessage('Dummy adapter - always accepts');
+
+            return referencedRefundResponse;
         }
+    }
+
+    private static String generateRandomRefNumber() {
+        return String.valueOf((Math.random() * 99999999999L).longValue());
     }
 }
