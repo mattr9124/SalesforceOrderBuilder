@@ -38,7 +38,7 @@ OrderBuilder()
     .activated();
 ```
 
-Add extra fields (for example custom fields:
+Add extra fields (for example custom fields):
 ```apex
 OrderBuilder.newOrderBuilderWithDefaults()
     .accountByName('Bob Jones')
