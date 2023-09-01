@@ -39,7 +39,7 @@ private class OrderBuilderTest {
 
         OrderItem productItem = order.OrderItems[0];
 
-        Assert.areEqual(OrderBuilder.ORDER_TYPE_PRODUCT, productItem.Type);
+        Assert.areEqual(OrderBuilder.ORDER_ITEM_TYPE_PRODUCT, productItem.Type);
         Assert.areEqual('M12345', productItem.Product2.ProductCode);
         Assert.areEqual(99, productItem.UnitPrice);
         Assert.areEqual(198, productItem.TotalPrice);
@@ -47,7 +47,7 @@ private class OrderBuilderTest {
 
         OrderItem deliveryItem = order.OrderItems[1];
 
-        Assert.areEqual(OrderBuilder.ORDER_TYPE_DELIVERY, deliveryItem.Type);
+        Assert.areEqual(OrderBuilder.ORDER_ITEM_TYPE_DELIVERY, deliveryItem.Type);
         Assert.areEqual('DHL', deliveryItem.Product2.ProductCode);
         Assert.areEqual(4.99, deliveryItem.UnitPrice);
         Assert.areEqual(4.99, deliveryItem.TotalPrice);
@@ -240,17 +240,6 @@ private class OrderBuilderTest {
         Assert.areEqual(148, paymentAuthorizations[1].Amount);
     }
 
-    private static OrderBuilder getBuilderForPaymentTest() {
-        OrderBuilder builderForPayment = OrderBuilder.newOrderBuilderWithDefaults()
-                .accountByName('Bob Jones')
-                .salesChannelByName('In Store')
-                .addProduct(OrderBuilder.productBySku('M12345', 2))
-                .deliveryMethodByName('DHL')
-                .shippingAndBillingAddress(getTestAddress())
-                .paymentGateway(new PaymentGateway());
-        return builderForPayment;
-    }
-
     @IsTest
     static void buildOrderNoPricebook() {
         // setup: Create some test data
@@ -280,6 +269,56 @@ private class OrderBuilderTest {
 
     }
 
+
+
+    @IsTest
+    static void buildOrderWithTaxLines() {
+        // setup: Create some test data
+        TestDataFactory.createBasicTestData();
+
+        //when: building an order with 1 product of quantity 2
+        Order order = OrderBuilder.newOrderBuilderWithDefaults()
+                .accountByName('Bob Jones')
+                .salesChannelByName('In Store')
+                .noPricebook()
+                .addProduct(OrderBuilder.productBySku('M12345', 1).price(10))
+                .deliveryMethodByNameWithPrice('DHL', 4.99)
+                .taxRate(0.15)
+                .build();
+
+        //then: an order should be created
+
+        //refetch
+        order = refetchOrder(order);
+
+        OrderItemTaxLineItem[] taxLines = order.OrderItemTaxLineItems;
+
+        Assert.isNotNull(taxLines, 'Tax lines should not be null');
+        Assert.isFalse(taxLines.isEmpty(), 'Tax lines should not be empty');
+        Assert.isTrue(taxLines.size() == 2, 'There should be 2 tax lines');
+
+        OrderItemTaxLineItem productTaxLine = taxLines[0];
+
+        Assert.areEqual('Estimated', productTaxLine.Type);
+        Assert.areEqual(1.5, productTaxLine.Amount);
+
+        OrderItemTaxLineItem deliveryTaxLine = taxLines[1];
+
+        Assert.areEqual('Estimated', deliveryTaxLine.Type);
+        Assert.areEqual(0.75, deliveryTaxLine.Amount);
+    }
+
+    private static OrderBuilder getBuilderForPaymentTest() {
+        OrderBuilder builderForPayment = OrderBuilder.newOrderBuilderWithDefaults()
+                .accountByName('Bob Jones')
+                .salesChannelByName('In Store')
+                .addProduct(OrderBuilder.productBySku('M12345', 2))
+                .deliveryMethodByName('DHL')
+                .shippingAndBillingAddress(getTestAddress())
+                .paymentGateway(new PaymentGateway());
+        return builderForPayment;
+    }
+
     private static Order refetchOrder(Order order) {
         return [
                 SELECT Name, OrderNumber, Account.Name, Pricebook2.Name, SalesChannel.SalesChannelName,
@@ -287,7 +326,8 @@ private class OrderBuilderTest {
                         TaxLocaleType, Status, OrderedDate, EffectiveDate, OrderReferenceNumber, BillingAddress, ShippingAddress,
                         (SELECT Product2.Name, Product2.ProductCode, UnitPrice, Quantity, TotalPrice, Type
                         FROM OrderItems
-                ), (SELECT  DeliverToAddress FROM OrderDeliveryGroups)
+                ), (SELECT  DeliverToAddress FROM OrderDeliveryGroups),
+                (SELECT Name, Type, Rate, Amount FROM OrderItemTaxLineItems)
                 FROM Order
                 WHERE Id = :order.Id
         ];

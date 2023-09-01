@@ -13,7 +13,6 @@ public with sharing class OmsConnectHelper {
         return ConnectApi.OrderSummaryCreation.createOrderSummary(orderSummaryInput);
     }
 
-
     /**
      * Creates one or many fulfillment orders depending on the second parameter.
      * It assumes a single delivery group and will use the same location
@@ -90,8 +89,53 @@ public with sharing class OmsConnectHelper {
     }
 
     /**
-     * This is really just to write less code. It will call the connect API with the correct input
-     * objects.
+     * Cancel or return items this will return/cancel the whole order
+     * Future versions might allow passing in specific order items
+     *
+     * @param orderSummaryId
+     * @param cancel True for cancel, False for return
+     * @param shippingFlag Sets the shipping reduction flag on the change order
+     * @param reason Must be valid reason, check the picklist configuration in your Org
+     * @param preview Preview or commit changes
+     *
+     * @return
+     */
+    public static ConnectApi.BaseOutputRepresentation createChangeOrder(Id orderSummaryId, Boolean cancel, Boolean shippingFlag, String reason, Boolean preview) {
+        ConnectApi.ChangeInputRepresentation changeInputRepresentation = new ConnectApi.ChangeInputRepresentation();
+        changeInputRepresentation.changeItems = new ConnectApi.ChangeItemInputRepresentation []{};
+        for (OrderItemSummary orderItemSummary : [SELECT Quantity FROM OrderItemSummary WHERE OrderSummaryId = :orderSummaryId AND TypeCode = 'Product']) {
+            ConnectApi.ChangeItemInputRepresentation changeItemInputRepresentation = new ConnectApi.ChangeItemInputRepresentation();
+
+            changeItemInputRepresentation.quantity = orderItemSummary.Quantity;
+            changeItemInputRepresentation.orderItemSummaryId = orderItemSummary.Id;
+            changeItemInputRepresentation.reason = reason;
+            changeItemInputRepresentation.shippingReductionFlag = shippingFlag;
+
+            changeInputRepresentation.changeItems.add(changeItemInputRepresentation);
+        }
+
+        if (cancel) {
+            return handleCancel(orderSummaryId, changeInputRepresentation, preview);
+        }
+        return handleReturn(orderSummaryId, changeInputRepresentation, preview);
+    }
+
+    private static ConnectApi.BaseOutputRepresentation handleCancel(Id orderSummaryId, ConnectApi.ChangeInputRepresentation changeInputRepresentation, Boolean preview) {
+        if (preview) {
+            return ConnectApi.OrderSummary.previewCancel(orderSummaryId, changeInputRepresentation);
+        }
+        return ConnectApi.OrderSummary.submitCancel(orderSummaryId, changeInputRepresentation);
+    }
+
+    private static ConnectApi.BaseOutputRepresentation handleReturn(Id orderSummaryId, ConnectApi.ChangeInputRepresentation changeInputRepresentation, Boolean preview) {
+        if (preview) {
+            return ConnectApi.OrderSummary.previewReturn(orderSummaryId, changeInputRepresentation);
+        }
+        return ConnectApi.OrderSummary.submitReturn(orderSummaryId, changeInputRepresentation);
+    }
+
+    /**
+     * Wrapper method that will call connect API with less code.
      * @param orderSummaryId
      * @param invoiceId
      *
@@ -103,5 +147,31 @@ public with sharing class OmsConnectHelper {
         ensureFundsAsyncInputRepresentation.invoiceId = invoiceId;
 
         return ConnectApi.OrderSummary.ensureFundsAsync(orderSummaryId, ensureFundsAsyncInputRepresentation);
+    }
+
+    /**
+     * Wrapper method that will call connect API with less code.
+     * @param orderSummaryId
+     * @param refundAmount
+     *
+     * @return
+     */
+    public static ConnectApi.EnsureRefundsAsyncOutputRepresentation ensureRefundByExcessFunds(Id orderSummaryId, Decimal refundAmount) {
+        ConnectApi.EnsureRefundsAsyncInputRepresentation inputRepresentation = new ConnectApi.EnsureRefundsAsyncInputRepresentation();
+        inputRepresentation.excessFundsAmount = refundAmount;
+        return ConnectApi.OrderSummary.ensureRefundsAsync(orderSummaryId, inputRepresentation);
+    }
+
+    /**
+     * Wrapper method that will call connect API with less code.
+     * @param orderSummaryId
+     * @param creditMemoId
+     *
+     * @return
+     */
+    public static ConnectApi.EnsureRefundsAsyncOutputRepresentation ensureRefundByCreditMemo(Id orderSummaryId, Id creditMemoId) {
+        ConnectApi.EnsureRefundsAsyncInputRepresentation inputRepresentation = new ConnectApi.EnsureRefundsAsyncInputRepresentation();
+        inputRepresentation.creditMemoId = creditMemoId;
+        return ConnectApi.OrderSummary.ensureRefundsAsync(orderSummaryId, inputRepresentation);
     }
 }

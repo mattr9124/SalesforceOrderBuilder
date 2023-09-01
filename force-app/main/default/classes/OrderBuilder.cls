@@ -43,8 +43,8 @@ public with sharing class OrderBuilder {
         AUTH, CAPTURE, SALE
     }
 
-    public final static String ORDER_TYPE_PRODUCT = 'Order Product';
-    public final static String ORDER_TYPE_DELIVERY = 'Delivery Charge';
+    public final static String ORDER_ITEM_TYPE_PRODUCT = 'Order Product';
+    public final static String ORDER_ITEM_TYPE_DELIVERY = 'Delivery Charge';
 
     private final Datetime now = Datetime.now();
     private final Date today = now.date();
@@ -59,6 +59,7 @@ public with sharing class OrderBuilder {
     private SalesChannel salesChannel;
     private OrderDeliveryMethod orderDeliveryMethod;
     private Decimal deliveryPrice;
+    private Decimal taxRate = 0;
     private Date effectiveDate;
     private Datetime orderedDate;
     private Schema.Address shippingAddress;
@@ -179,6 +180,10 @@ public with sharing class OrderBuilder {
 
         insert orderItems;
 
+        if (taxRate > 0) {
+            addTaxLines(orderItems);
+        }
+
         buildPayments(order, payments);
 
         if (activateOrder) {
@@ -187,6 +192,24 @@ public with sharing class OrderBuilder {
         }
 
         return order;
+    }
+
+    private void addTaxLines(OrderItem[] orderItems) {
+
+        OrderItemTaxLineItem[] orderItemTaxLineItems = new List<OrderItemTaxLineItem>();
+
+        for (OrderItem orderItem : orderItems) {
+            orderItemTaxLineItems.add(new OrderItemTaxLineItem(
+                    Name = orderItem.Type == ORDER_ITEM_TYPE_DELIVERY ? 'Delivery Charge Tax' :  orderItem.Product2.ProductCode + ' Tax',
+                    Type = 'Estimated',
+                    TaxEffectiveDate = today,
+                    Amount = (orderItem.TotalLineAmount * taxRate).setScale(2),
+                    Rate = taxRate,
+                    OrderItemId = orderItem.Id
+            ));
+        }
+
+        insert orderItemTaxLineItems;
     }
 
     private void setAccountAddresses() {
@@ -304,6 +327,11 @@ public with sharing class OrderBuilder {
     public OrderBuilder todayDates() {
         effectiveDate(today);
         orderedDate(now);
+        return this;
+    }
+
+    public OrderBuilder taxRate(Decimal taxRate) {
+        this.taxRate = taxRate;
         return this;
     }
 
@@ -697,7 +725,7 @@ public with sharing class OrderBuilder {
         private Decimal unitPrice;
         private Order order;
         private OrderDeliveryGroup orderDeliveryGroup;
-        private String type = ORDER_TYPE_PRODUCT;
+        private String type = ORDER_ITEM_TYPE_PRODUCT;
 
         private final Map<String, Object> extraFields = new Map<String, Object>();
 
@@ -742,7 +770,7 @@ public with sharing class OrderBuilder {
         }
 
         OrderItemBuilder deliveryChargeType() {
-            this.type = ORDER_TYPE_DELIVERY;
+            this.type = ORDER_ITEM_TYPE_DELIVERY;
             return this;
         }
 
