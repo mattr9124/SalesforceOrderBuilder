@@ -148,6 +148,8 @@ public with sharing class OrderBuilder {
      */
     public Order build() {
 
+        validate();
+
         if (useAccountAddress) {
             setAccountAddresses();
         }
@@ -162,6 +164,7 @@ public with sharing class OrderBuilder {
 
         insert order;
 
+        // TODO add ability to create multiple delivery groups
         OrderDeliveryGroup orderDeliveryGroup = createOrderDeliveryGroup(order);
 
         // build order items
@@ -192,6 +195,16 @@ public with sharing class OrderBuilder {
         }
 
         return order;
+    }
+
+    private void validate() {
+        fieldNotNull(this.account, 'Account is required');
+        fieldNotNull(this.salesChannel, 'Sales channel is required');
+        fieldNotNull(this.orderDeliveryMethod, 'Order delivery method is required');
+    }
+
+    private void fieldNotNull(Object field, String message) {
+        if (field == null) throw new RequiredFieldException(message);
     }
 
     private void addTaxLines(OrderItem[] orderItems) {
@@ -788,6 +801,9 @@ public with sharing class OrderBuilder {
             this.extraFields.putAll(extraFields);
             return this;
         }
+    }
+
+    private class RequiredFieldException extends Exception {
     }
 
     private class UnsupportedPaymentTypeException extends Exception {
