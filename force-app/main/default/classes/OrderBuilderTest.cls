@@ -253,7 +253,6 @@ private class OrderBuilderTest {
                 .addProduct(OrderBuilder.productBySku('M12345', 2).price(10))
                 .deliveryMethodByNameWithPrice('DHL', 2)
                 .shippingAndBillingAddress(getTestAddress())
-                .noPricebook()
                 .build();
 
         //then: should get an order with an order item and the correct price
@@ -265,10 +264,31 @@ private class OrderBuilderTest {
 
         Assert.isNotNull(orderItems);
         Assert.isTrue(orderItems.size() == 2, 'There should be 2 order item');
-
-
     }
 
+    @IsTest
+    static void buildOrderOverridePricebook() {
+        // setup: Create some test data
+        TestDataFactory.createBasicTestData();
+
+        //when: building an order with 1 product of quantity 2
+        Order order = OrderBuilder.newOrderBuilder()
+                .useStandardPricebook()
+                .accountByName('Bob Jones')
+                .salesChannelByName('In Store')
+                .todayDates()
+                .addProduct(OrderBuilder.productBySku('M12345', 2).price(10))
+                .deliveryMethodByNameWithPrice('DHL', 2)
+                .shippingAndBillingAddress(getTestAddress())
+                .build();
+
+        //then: should get an order with an order item and the correct price
+        OrderItem[] orderItems = [
+                SELECT UnitPrice, TotalLineAmount FROM OrderItem WHERE OrderId = :order.Id
+        ];
+
+        Assert.areEqual(10, orderItems[0].UnitPrice);
+    }
 
 
     @IsTest

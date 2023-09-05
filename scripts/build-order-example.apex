@@ -30,6 +30,7 @@ try {
             )
             .todayDates()
             .addProduct(OrderBuilder.productBySku('M12345', 2))
+            .addProduct(OrderBuilder.productBySku('M54321', 1))
             .anyPaymentGateway()
             .useStandardPricebook()
             .addPaymentInfo(
@@ -40,11 +41,12 @@ try {
             .build();
     //refetch
     order = [
-            SELECT Name, Account.Name, Pricebook2.Name, SalesChannel.SalesChannelName, TaxLocaleType, Status, OrderedDate, EffectiveDate, OrderReferenceNumber, (
-                    SELECT Product2.Name, Product2.ProductCode, UnitPrice, Quantity, TotalPrice
-                    FROM OrderItems
-            )
+            SELECT FIELDS(STANDARD),
+            (SELECT FIELDS(STANDARD) FROM OrderItems),
+            (SELECT FIELDS(STANDARD) FROM OrderItemTaxLineItems),
+            (SELECT FIELDS(STANDARD) FROM OrderDeliveryGroups)
             FROM Order
+            WHERE Id = :order.Id
     ];
 
     System.debug(JSON.serializePretty(order));

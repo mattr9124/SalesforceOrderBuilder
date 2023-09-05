@@ -136,7 +136,7 @@ public with sharing class OrderBuilder {
      * Will build the order based on the inputs given. This will perform
      * all the necessary DML.
      *
-     * Currently there is no validation for required fields and no error
+     * Currently there is minimal validation for required fields and no error
      * handling, so this will throw various exceptions for missing fields
      * and potentially null pointer exceptions if certain important
      * elements are missing. In future versions (time-permitting) some
@@ -156,7 +156,7 @@ public with sharing class OrderBuilder {
 
         Order order = createOrder();
 
-        if (!pricebookOptional) {
+        if (pricebook2 != null) {
             order.Pricebook2Id = pricebook2.Id;
         }
 
@@ -175,7 +175,7 @@ public with sharing class OrderBuilder {
             orderItems.add(deliveryItem);
         }
 
-        if (pricebookOptional) {
+        if (pricebook2 == null) {
             setListPriceOnOrderItems(orderItems);
         } else {
             setOrderItemPrices(orderItems, pricebook2);
@@ -609,7 +609,12 @@ public with sharing class OrderBuilder {
                 AND Product2Id IN :productToOrderItemMapping.keySet()
                 AND CurrencyIsoCode = :account.CurrencyIsoCode
         ]) {
-            setOrderItemPrice(productToOrderItemMapping.get(pricebookEntry.Product2Id), pricebookEntry);
+            OrderItem orderItem = productToOrderItemMapping.get(pricebookEntry.Product2Id);
+            if (orderItem.UnitPrice == null || orderItem.UnitPrice == 0) {
+                setOrderItemPrice(orderItem, pricebookEntry);
+            } else {
+                setOrderItemPrice(orderItem, pricebookEntry, orderItem.UnitPrice);
+            }
         }
     }
 
@@ -619,8 +624,12 @@ public with sharing class OrderBuilder {
     }
 
     private void setOrderItemPrice(OrderItem orderItem, PricebookEntry pricebookEntry) {
+        setOrderItemPrice(orderItem, pricebookEntry, null);
+    }
+
+    private void setOrderItemPrice(OrderItem orderItem, PricebookEntry pricebookEntry, Decimal overrideValue) {
         orderItem.PricebookEntryId = pricebookEntry.Id;
-        setOrderItemPrice(orderItem, pricebookEntry.UnitPrice);
+        setOrderItemPrice(orderItem, overrideValue == null ? pricebookEntry.UnitPrice : overrideValue);
     }
 
     private void setListPriceOnOrderItems(OrderItem[] orderItems) {
