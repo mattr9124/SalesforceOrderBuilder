@@ -9,6 +9,8 @@ This can be useful for:
 
 and hopefully more...
 
+Check out this video demo here: https://youtu.be/sAjTY5Va5GE
+
 # Usage
 
 Examples that can be run as anonymous Apex with existing data in the Org.
@@ -117,7 +119,3 @@ I have also included an OMS Connect Helper. This is just a collection of static 
 # Contributions and Feedback
 
 Contributions are more than welcome, also I am very interested in user feedback. I want the API to be as easy and intuitive to use as possible. So something doesn't make sense we can change it for the better. 
-
-# Video Demo
-
-https://youtu.be/sAjTY5Va5GE
