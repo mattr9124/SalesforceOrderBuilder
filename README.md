@@ -120,4 +120,4 @@ Contributions are more than welcome, also I am very interested in user feedback.
 
 # Video Demo
 
-Coming soon - I'm working on a little YouTube demo so check back for that soon.
+https://youtu.be/sAjTY5Va5GE
