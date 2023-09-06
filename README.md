@@ -81,7 +81,8 @@ Order with multiple payment authorizations (payment with 2 cards for $50 and $30
 OrderBuilder.newOrderBuilderWithDefaults()
     .accountByName('Bob Jones')
     .salesChannelByName('In Store')
-    .addProduct(OrderBuilder.productBySku('M12345', 2).price(40)) // overrides unit price to 40 
+    .addProduct(OrderBuilder.productBySku('M12345', 2).price(30)) // overrides unit price to 30
+    .addProduct(OrderBuilder.productBySku('M54321', 1).price(20)) 
     .deliveryMethodByName('DHL')
     .shippingAndBillingAddress(getTestAddress())
     .paymentGatewayByName('Adyen')
