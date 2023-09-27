@@ -1,3 +1,10 @@
+// CHANGE THESE AS NECESSARY!
+final String DEVELOPER_NAME = 'Adyen';
+final String MASTER_LABEL = 'Adyen';
+final String APEX_CLASS_NAME = 'DummyPaymentGatewayAdapter';
+
+Id apexAdapterId = [SELECT Id FROM ApexClass WHERE Name = :APEX_CLASS_NAME LIMIT 1].Id;
+
 String baseUrl = URL.getSalesforceBaseUrl().toExternalForm();
 String version = 'v58.0';
 String serviceUrlTemplate = '{0}/services/data/{1}/sobjects/PaymentGatewayProvider';
@@ -15,9 +22,9 @@ httpRequest.setHeader('Content-Type', 'application/json');
 httpRequest.setBody(
         JSON.serialize(
                 new Map<String, Object> {
-                        'DeveloperName' => 'Adyen',
-                        'MasterLabel' => 'Adyen',
-                        'ApexAdapterId' => '01p5300000F8KGkAAN'
+                        'DeveloperName' => DEVELOPER_NAME,
+                        'MasterLabel' => MASTER_LABEL,
+                        'ApexAdapterId' => apexAdapterId
                 }
         )
 );
