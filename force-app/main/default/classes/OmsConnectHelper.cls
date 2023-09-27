@@ -89,13 +89,61 @@ public with sharing class OmsConnectHelper {
     }
 
     /**
+     * Cancels the whole fulfillment order
+     * @param fulfillmentOrderId
+     *
+     * @return
+     */
+    public static ConnectApi.FulfillmentOrderCancelLineItemsOutputRepresentation cancelFulfillmentItem(Id fulfillmentOrderId) {
+        return cancelFulfillmentItem(fulfillmentOrderId, 0, 0);
+    }
+
+    /**
+     * Cancel a fulfillment order.
+     *
+     * @param fulfillmentOrderId The FO Id
+     * @param lines How many lines to cancel - null or 0 will cancel the whole FO, otherwise it will go in the order it finds, so passing 1 will cancel the first line, 2 will cancel the first 2, etc...
+     * @param quantity - Quantity to cancel - null or 0 will cancel all, otherwise same logic as lines parameter
+     *
+     * @return
+     */
+    public static ConnectApi.FulfillmentOrderCancelLineItemsOutputRepresentation cancelFulfillmentItem(Id fulfillmentOrderId, Integer lines, Integer quantity) {
+        // will cancel quantity 1 and first line
+
+        ConnectApi.FulfillmentOrderLineItemsToCancelInputRepresentation cancelInput = new ConnectApi.FulfillmentOrderLineItemsToCancelInputRepresentation();
+
+        FulfillmentOrderLineItem[] fulfillmentItems = [
+                SELECT Id, Quantity
+                FROM FulfillmentOrderLineItem
+                WHERE FulfillmentOrderId = :fulfillmentOrderId
+        ];
+
+        cancelInput.fulfillmentOrderLineItemsToCancel = new List<ConnectApi.FulfillmentOrderLineItemInputRepresentation>();
+
+        Integer foLineSize = lines == null || lines <= 0 || lines > fulfillmentItems.size() ? fulfillmentItems.size() : lines;
+
+        for (Integer foIndex = 0; foIndex < foLineSize; foIndex++) {
+            FulfillmentOrderLineItem fulfillmentOrderLineItem = fulfillmentItems[foIndex];
+            ConnectApi.FulfillmentOrderLineItemInputRepresentation inputLine = new ConnectApi.FulfillmentOrderLineItemInputRepresentation();
+
+            inputLine.fulfillmentOrderLineItemId = fulfillmentOrderLineItem.Id;
+            inputLine.quantity = quantity == null || quantity <= 0 ? fulfillmentOrderLineItem.Quantity : quantity;
+
+            cancelInput.fulfillmentOrderLineItemsToCancel.add(inputLine);
+        }
+
+        return ConnectApi.FulfillmentOrder.cancelFulfillmentOrderLineItems(fulfillmentOrderId, cancelInput);
+    }
+
+
+    /**
      * Cancel or return items this will return/cancel the whole order
      * Future versions might allow passing in specific order items
      *
      * @param orderSummaryId
      * @param cancel True for cancel, False for return
      * @param shippingFlag Sets the shipping reduction flag on the change order
-     * @param reason Must be valid reason, check the picklist configuration in your Org
+     * @param reason Must be valid reason, check the picklist configuration in your Org on the OrderItemSummaryChange.Reason field
      * @param preview Preview or commit changes
      *
      * @return
