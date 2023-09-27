@@ -240,11 +240,11 @@ public with sharing class OrderBuilder {
         FROM Account WHERE Id = :account.Id];
 
         this.billingAddress = new Schema.Address(
-                        Street = accountWithAddress.BillingStreet,
-                        City = accountWithAddress.BillingCity,
-                        PostalCode = accountWithAddress.BillingPostalCode,
-                        State = accountWithAddress.BillingState,
-                        Country = accountWithAddress.BillingCountry);
+                Street = accountWithAddress.BillingStreet,
+                City = accountWithAddress.BillingCity,
+                PostalCode = accountWithAddress.BillingPostalCode,
+                State = accountWithAddress.BillingState,
+                Country = accountWithAddress.BillingCountry);
 
         this.shippingAddress = new Schema.Address(
                 Street = accountWithAddress.ShippingStreet,
@@ -310,7 +310,7 @@ public with sharing class OrderBuilder {
         this.useAccountAddress = true;
         return this;
     }
-    
+
     public OrderBuilder shippingAndBillingAddress(Schema.Address address) {
         this.useAccountAddress = false;
         return shippingAddress(address).billingAddress(address);
@@ -399,11 +399,19 @@ public with sharing class OrderBuilder {
     }
 
     private final static String DELIVERY_QUERY = 'SELECT Id, ProductId, Product.Name, Product.ProductCode, Product.StockKeepingUnit ' +
-                                                 'FROM OrderDeliveryMethod WHERE {0}';
+            'FROM OrderDeliveryMethod WHERE {0}';
 
     private OrderDeliveryMethod queryDeliveryMethod(String whereClause, Map<String, Object> parameters) {
         String fullQuery = String.format(DELIVERY_QUERY, new Object[] {whereClause});
         OrderDeliveryMethod[] orderDeliveryMethod = Database.queryWithBinds(fullQuery, parameters, AccessLevel.USER_MODE);
+
+        if (orderDeliveryMethod.isEmpty()) {
+            throw new DataNotFoundException(
+                    String.format('Delivery method not found\nwhereClause = {0}\nparams = {1}',
+                            new Object []{
+                                    whereClause, parameters
+                            }));
+        }
 
         return orderDeliveryMethod[0];
     }
@@ -529,12 +537,12 @@ public with sharing class OrderBuilder {
 
         for (ProductBuilder productWrapper : productWrappers) {
             orderItems.add(newOrderItemBuilder()
-                            .order(order)
-                            .orderDeliveryGroup(orderDeliveryGroup)
-                            .productBySku(productWrapper.sku, productWrapper.quantity)
-                            .unitPrice(productWrapper.unitPrice)
-                            .withExtraFields(productWrapper.extraFields)
-                            .build());
+                    .order(order)
+                    .orderDeliveryGroup(orderDeliveryGroup)
+                    .productBySku(productWrapper.sku, productWrapper.quantity)
+                    .unitPrice(productWrapper.unitPrice)
+                    .withExtraFields(productWrapper.extraFields)
+                    .build());
 
         }
         return orderItems;
@@ -755,6 +763,9 @@ public with sharing class OrderBuilder {
         }
 
         OrderItem build() {
+            if (product2 == null) {
+                throw new RequiredFieldException('Product is required for order item');
+            }
             OrderItem orderItem = new OrderItem(
                     Product2Id = product2.Id,
                     Quantity = quantity,
@@ -813,6 +824,9 @@ public with sharing class OrderBuilder {
     }
 
     private class RequiredFieldException extends Exception {
+    }
+
+    private class DataNotFoundException extends Exception {
     }
 
     private class UnsupportedPaymentTypeException extends Exception {
