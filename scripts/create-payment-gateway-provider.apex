@@ -5,7 +5,7 @@ final String APEX_CLASS_NAME = 'DummyPaymentGatewayAdapter';
 
 Id apexAdapterId = [SELECT Id FROM ApexClass WHERE Name = :APEX_CLASS_NAME LIMIT 1].Id;
 
-String baseUrl = URL.getSalesforceBaseUrl().toExternalForm();
+String baseUrl = URL.getOrgDomainUrl().toExternalForm();
 String version = 'v58.0';
 String serviceUrlTemplate = '{0}/services/data/{1}/sobjects/PaymentGatewayProvider';
 
